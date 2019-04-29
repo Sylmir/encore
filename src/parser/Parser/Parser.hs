@@ -383,13 +383,14 @@ typ = makeExprParser singleType opTable
       range = do
         reserved "Range"
         return rangeType
-      builtin = maybe <|> fut <|> par <|> stream
+      builtin = maybe <|> fut <|> par <|> stream <|> flow
         where
           builtin' t r = liftM t (reserved r >> brackets typ)
           maybe  = builtin' maybeType "Maybe"
           fut    = builtin' futureType "Fut"
           par    = builtin' parType "Par"
           stream = builtin' streamType "Stream"
+          flow   = builtin' flowType "Flow"
       refType = do
         setMode <- option id mode
         full <- modulePath

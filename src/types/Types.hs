@@ -6,6 +6,8 @@ module Types(
             ,isArrowType
             ,futureType
             ,isFutureType
+            ,flowType
+            ,isFlowType
             ,parType
             ,isParType
             ,streamType
@@ -324,6 +326,7 @@ data InnerType =
                    ,modes :: [Mode]
                    }
         | FutureType{resultType :: Type}
+        | FlowType{resultType :: Type}
         | ParType{resultType :: Type}
         | StreamType{resultType :: Type}
         | ArrayType{resultType :: Type}
@@ -494,6 +497,7 @@ instance Show InnerType where
             | otherwise = show ty
     show FutureType{resultType} = "Fut" ++ brackets resultType
     show ParType{resultType}    = "Par" ++ brackets resultType
+    show FlowType{resultType}   = "Flow" ++ brackets resultType
     show StreamType{resultType} = "Stream" ++ brackets resultType
     show ArrayType{resultType}  = brackets resultType
     show RangeType   = "Range"
@@ -542,6 +546,7 @@ showWithKind ty = kind (inner ty) ++ " " ++ show ty
     kind ArrowType{}                   = "function type"
     kind FutureType{}                  = "future type"
     kind ParType{}                     = "parallel type"
+    kind FlowType{}                    = "flow type"
     kind StreamType{}                  = "stream type"
     kind RangeType{}                   = "range type"
     kind ArrayType{}                   = "array type"
@@ -990,6 +995,11 @@ isArrowType _ = False
 futureType = typ . FutureType
 isFutureType Type{inner = FutureType {}} = True
 isFutureType _ = False
+
+-- Flow is a parametric type
+flowType = typ . FlowType
+isFlowType Type{inner = FlowType {}} = True
+isFlowType _ = False
 
 maybeType = typ . MaybeType
 isMaybeType Type{inner = MaybeType {}} = True
