@@ -1,0 +1,53 @@
+-- Simple cases to check that the conversion from T to Flow[T] is correctly 
+-- handled in the typechecker.
+
+import Task
+
+fun foo(x : int) : int
+    return x + 2
+end
+
+fun bar(x : Flow[int]) : Flow[int]
+    return x
+end
+
+fun createFlow() : Flow[int]
+    return 1
+end
+
+fun rec() : Flow[Flow[Flow[Flow[int]]]]
+    return 1
+end
+
+active class Main
+    def withInt() : Flow[int]
+        return 3
+    end
+
+    def withBool() : Flow[bool]
+        return true
+    end
+
+    def withString() : Flow[String]
+        return "Foo"
+    end
+
+    def withFut() : Flow[Fut[int]]
+        return async(foo(1))
+    end
+
+    def sendFlowToFlow() : Flow[int]
+        val x = createFlow()
+        return bar(x)
+    end
+
+    def sendValToFlow() : unit
+        bar(1)
+    end
+
+    def main() : unit
+        var f = rec()
+        bar(f)
+        println("Argh")
+    end
+end

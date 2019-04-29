@@ -391,7 +391,8 @@ getModes ty
 
 hasResultType x
   | isArrowType x || isFutureType x || isParType x ||
-    isStreamType x || isArrayType x || isMaybeType x = True
+    isStreamType x || isArrayType x || isMaybeType x ||
+    isFlowType x = True
   | otherwise = False
 
 getRefNamespace ty
@@ -572,6 +573,7 @@ hasSameKind ty1 ty2
     areBoth isRefType ||
     areBoth isArrowType ||
     areBoth isRangeType ||
+    areBoth isFlowType ||
     areBoth isCType = True
   | otherwise = False
   where

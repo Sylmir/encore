@@ -1,0 +1,15 @@
+-- Check that we can't substitue Flow[T] where a value of type T is expected.
+
+fun foo(x : int) : unit
+   pass 
+end 
+
+fun createFlow(x : int) : Flow[int]
+    return x
+end
+
+active class Main
+    def main() : unit
+        foo(createFlow(3))
+    end
+end 

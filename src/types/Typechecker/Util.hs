@@ -341,6 +341,9 @@ subtypeOf sub super
                  contravariance && covariance
     | isArrayType sub && isArrayType super =
         getResultType sub `equivalentTo` getResultType super
+    | isFlowType super && (not . isFlowType) sub = do
+        let res = fst $ stripTypeN super isFlowType
+        sub `equivalentTo` res
     | hasResultType sub && hasResultType super =
         liftM (sub `hasSameKind` super &&) $
               getResultType sub `subtypeOf` getResultType super
@@ -951,3 +954,24 @@ checkConjunction source sinks
     singleConjunction ty1 ty2 (tys1, tys2) =
         ty1 `elem` tys1 && ty2 `elem` tys2 ||
         ty1 `elem` tys2 && ty2 `elem` tys1
+
+-- Strip a parametric type down to its final element.
+-- Example : stripType Fut[Fut[int]] isFutType = int.
+stripType :: Type -> (Type -> Bool) -> Type
+stripType ty check
+      | check ty  = stripType (getResultType ty) check
+      | otherwise = ty
+
+-- Strip a parametric type down to its final element, counting the number of
+-- times we went down.
+-- Example : stripTypeN Fut[Fut[int]] isFutType = (int, 2)
+stripTypeN :: Type -> (Type -> Bool) -> (Type, Int)
+stripTypeN ty check = runState (stripTypeNM ty check) 0
+  where
+    stripTypeNM :: Type -> (Type -> Bool) -> State Int Type
+    stripTypeNM ty check
+      | check ty = do
+        state <- get
+        put $ state + 1
+        stripTypeNM (getResultType ty) check
+      | otherwise = return ty

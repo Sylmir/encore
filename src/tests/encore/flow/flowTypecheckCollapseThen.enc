@@ -1,0 +1,27 @@
+-- Check that Flow[Flow[T]] properly collapses when we are dealing with then*.
+
+fun foo() : int
+    return 0
+end
+
+fun bar() : Flow[int]
+    return async*(foo())
+end
+
+fun chain(res : int) : Flow[int]
+    return async*(foo())
+end
+
+fun baz() : Flow[int]
+    return then*(async*(bar()), chain) -- Must have type Flow[int]
+end
+
+fun ensureCollapse(f : Flow[int]) : unit
+    println("...")
+end
+
+active class Main
+    def main() : unit
+        ensureCollapse(baz())
+    end
+end
