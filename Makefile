@@ -70,6 +70,8 @@ TASK_INC=$(RUNTIME_DIR)/task/task.h
 TASK_LIB=$(RUNTIME_DIR)/pony/bin/$(CONFIG)/libtask.a
 PARTY_INC=$(RUNTIME_DIR)/party/party.h
 PARTY_LIB=$(RUNTIME_DIR)/pony/bin/$(CONFIG)/libparty.a
+FLOW_INC=$(RUNTIME_DIR)/flow/flow.h
+FLOW_LIB=$(RUNTIME_DIR)/pony/bin/$(CONFIG)/libflow.a
 STREAM_INC=$(RUNTIME_DIR)/stream/stream.h
 STREAM_LIB=$(RUNTIME_DIR)/pony/bin/$(CONFIG)/libstream.a
 ARRAY_INC=$(RUNTIME_DIR)/array/array.h
@@ -94,6 +96,7 @@ pony: dirs $(PONY_INC)
 	cp -r $(ARRAY_INC) $(INC_DIR)
 	cp -r $(TUPLE_INC) $(INC_DIR)
 	cp -r $(RANGE_INC) $(INC_DIR)
+	cp -r $(FLOW_INC) $(INC_DIR)
 	cp -r $(PONY_LIB) $(LIB_DIR)
 	cp -r $(FUTURE_LIB) $(LIB_DIR)
 	cp -r $(CLOSURE_LIB) $(LIB_DIR)
@@ -105,6 +108,7 @@ pony: dirs $(PONY_INC)
 	cp -r $(ARRAY_LIB) $(LIB_DIR)
 	cp -r $(TUPLE_LIB) $(LIB_DIR)
 	cp -r $(RANGE_LIB) $(LIB_DIR)
+	cp -r $(FLOW_LIB) $(LIB_DIR)
 
 clean:
 	rm -rf .stack-work/dist

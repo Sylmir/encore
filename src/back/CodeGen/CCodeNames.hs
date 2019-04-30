@@ -107,6 +107,9 @@ option = Ptr $ Typ "option_t"
 par :: CCode Ty
 par = Ptr $ Typ "par_t"
 
+flow :: CCode Ty
+flow = Ptr $ Typ "flow_t"
+
 futNam :: CCode Name
 futNam = Nam "_fut"
 

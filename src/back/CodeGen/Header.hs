@@ -39,6 +39,7 @@ generateHeader p =
       "task.h",
       "option.h",
       "party.h",
+      "flow.h",
       "string.h",
       "stdio.h",
       "stdarg.h",

@@ -93,6 +93,7 @@ solution "ponyrt"
     "libponyrt",
     "../common",
     "../dtrace",
+    "../flow"
   }
 
   flags {
@@ -237,6 +238,12 @@ project "future"
   links { "closure", "array" }
   files {
     "../future/future.c",
+  }
+
+project "flow"
+  c_lib()
+  files {
+    "../flow/flow.c"
   }
 
 project "stream"
