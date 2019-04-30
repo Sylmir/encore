@@ -1,0 +1,9 @@
+trait Foo
+    require val t : Flow[Flow[int]]
+end
+
+active class Main
+    def main() : unit
+        println("...")
+    end
+end

@@ -1,0 +1,11 @@
+trait Foo
+    def f(x : Flow[Flow[int]]) : unit
+        println("...")
+    end
+end
+
+active class Main
+    def main() : unit
+        println("...")
+    end
+end
