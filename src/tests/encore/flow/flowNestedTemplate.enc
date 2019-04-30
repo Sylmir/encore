@@ -1,0 +1,17 @@
+typedef Foo[t] = Flow[t]
+
+fun f[t](x : Flow[t]) : Flow[t]
+    return x
+end
+
+active class Main
+    def foo[t](x : Foo[t]) : Foo[t]
+        return x
+    end
+
+    def main() : unit
+        f[Flow[int]](2)
+        this.foo[Flow[int]](2)
+        println("...")
+    end
+end

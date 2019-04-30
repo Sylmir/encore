@@ -15,10 +15,6 @@ fun createFlow() : Flow[int]
     return 1
 end
 
-fun rec() : Flow[Flow[Flow[Flow[int]]]]
-    return 1
-end
-
 active class Main
     def withInt() : Flow[int]
         return 3
@@ -46,8 +42,6 @@ active class Main
     end
 
     def main() : unit
-        var f = rec()
-        bar(f)
-        println("Argh")
+        println("...")
     end
 end

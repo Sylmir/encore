@@ -97,7 +97,7 @@ instance Precheckable Program where
                   find ((== Just (itarget shadowedImport)) . ialias) imports
           pushError illegalAlias $ ShadowedImportError shadowedImport
       assertNonOverlapWithPredefineds =
-        when (or (map (`elem` ["Maybe", "Fut", "Stream", "Par"]) newTypeNames)) $
+        when (or (map (`elem` ["Maybe", "Fut", "Stream", "Par", "Flow"]) newTypeNames)) $
                 tcError OverlapWithBuiltins
       newTypeNames = map (getId . tname) traits ++
                      map (getId . cname) classes ++
@@ -133,6 +133,7 @@ instance Precheckable Typedef where
                          mapM resolveTypeParameter (getTypeParameters typedefdef)
      let resolvesTo = typeSynonymRHS typedefdef
          addTypeParams = addTypeParameters typeParams
+     assertNotNestedFlow resolvesTo
      resolvesTo' <- local addTypeParams $ resolveTypeAndCheckForLoops resolvesTo
      let typedefdef' = typeSynonymSetRHS typedefdef resolvesTo'
                        `setTypeParameters` typeParams
@@ -142,6 +143,7 @@ instance Precheckable FunctionHeader where
     doPrecheck header = do
       htypeparams' <- local (addTypeParameters (htypeparams header)) $
                             mapM resolveTypeParameter (htypeparams header)
+      assertNotNestedFlow $ htype header
       htype' <- local (addTypeParameters htypeparams') $
                       resolveType (htype header)
       hparams' <- local (addTypeParameters htypeparams') $
@@ -183,6 +185,7 @@ instance Precheckable Function where
 
 instance Precheckable ParamDecl where
     doPrecheck p@Param{ptype} = do
+      assertNotNestedFlow ptype
       ptype' <- resolveType ptype
       return $ setType ptype' p
 
@@ -349,6 +352,7 @@ instance Precheckable ClassDecl where
 
 instance Precheckable FieldDecl where
     doPrecheck f@Field{ftype} = do
+      assertNotNestedFlow ftype
       ftype' <- resolveType ftype
       return $ setType ftype' f
 

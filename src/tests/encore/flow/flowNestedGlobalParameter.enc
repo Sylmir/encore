@@ -1,0 +1,10 @@
+fun foo(x : Flow[Flow[int]]) : unit
+    println("...")
+end
+
+active class Main
+    def main() : unit
+        println("...")
+    end
+end
+

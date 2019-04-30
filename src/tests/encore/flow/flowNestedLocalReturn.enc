@@ -1,0 +1,9 @@
+active class Main
+    def foo() : Flow[Flow[int]]
+        return 2
+    end
+
+    def main() : unit
+        println("...")
+    end
+end

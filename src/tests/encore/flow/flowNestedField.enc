@@ -1,0 +1,7 @@
+active class Main
+    var x : Flow[Flow[int]]
+    
+    def main() : unit
+        println("...")
+    end
+end

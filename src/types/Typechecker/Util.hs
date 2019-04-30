@@ -47,6 +47,7 @@ module Typechecker.Util(TypecheckM
                        ,isSharableType
                        ,checkConjunction
                        ,includesMarkerTrait
+                       ,assertNotNestedFlow
                        ) where
 
 import Identifiers
@@ -975,3 +976,14 @@ stripTypeN ty check = runState (stripTypeNM ty check) 0
         put $ state + 1
         stripTypeNM (getResultType ty) check
       | otherwise = return ty
+
+-- Check that a type is not Flow[Flow[...]]. The semantics of Flow don't allow
+-- Flow[Flow[...]] to appear, except when dealing with type application. As
+-- such, construct Flow[t] is allowed to generate Flow[Flow[T]], with 
+-- T != Flow, but Flow[Flow[...]] cannot be written explicitly.
+assertNotNestedFlow :: Type -> TypecheckM Bool
+assertNotNestedFlow ty = 
+  if isFlowType ty && isFlowType (getResultType ty) then
+    tcError $ ExplicitNestedFlowError ty
+  else
+    return True

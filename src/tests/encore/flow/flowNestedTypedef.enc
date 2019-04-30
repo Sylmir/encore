@@ -1,0 +1,7 @@
+typedef Foo = Flow[Flow[int]]
+
+active class Main
+    def main() : unit
+        println("...")
+    end
+end
