@@ -982,8 +982,13 @@ stripTypeN ty check = runState (stripTypeNM ty check) 0
 -- such, construct Flow[t] is allowed to generate Flow[Flow[T]], with 
 -- T != Flow, but Flow[Flow[...]] cannot be written explicitly.
 assertNotNestedFlow :: Type -> TypecheckM Bool
-assertNotNestedFlow ty = 
-  if isFlowType ty && isFlowType (getResultType ty) then
-    tcError $ ExplicitNestedFlowError ty
-  else
-    return True
+assertNotNestedFlow ty
+  | isFlowType ty && isFlowType (getResultType ty) = tcError $ ExplicitNestedFlowError ty
+  | isFlowType ty = do
+    result <- resolveType $ getResultType ty
+    if isFlowType result then
+      tcError $ ExplicitNestedFlowSynonymError ty $ getResultType ty
+    else
+      return True
+  | otherwise = return True
+      

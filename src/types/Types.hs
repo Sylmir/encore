@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 module Types(
              Type
+            ,isUnresolved
             ,arrowType
             ,arrowWithTypeParam
             ,isArrowType

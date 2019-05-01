@@ -1,0 +1,8 @@
+typedef MyFlow = Flow[int]
+typedef Sneaky = Flow[MyFlow]
+
+active class Main
+    def main() : unit
+        println("...")
+    end
+end
