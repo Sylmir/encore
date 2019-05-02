@@ -327,6 +327,11 @@ ppExpr Async {body=body@(Seq {})} =
     indent (ppBody body) $+$
   "end"
 ppExpr Async {body} = "async" <> parens (ppExpr body)
+ppExpr AsyncStar {body=body@(Seq {})} = 
+  "async*" $+$
+    indent (ppBody body) $+$
+  "end"
+ppExpr AsyncStar {body} = "async*" <> parens (ppExpr body)
 ppExpr (MaybeValue _ (JustData a)) = "Just" <> parens (ppExpr a)
 ppExpr (MaybeValue _ NothingData) = "Nothing"
 ppExpr Tuple {args} = parens (commaSep (map ppExpr args))
@@ -398,7 +403,10 @@ ppExpr Borrow {target, name, body} =
     "end"
 ppExpr FutureChain {future, chain} =
     ppExpr future <+> "~~>" <+> ppExpr chain
+ppExpr FutureChainStar {future, chain} =
+    ppExpr future <+> "~~>*" <+> ppExpr chain
 ppExpr Get {val} = "get" <> parens (ppExpr val)
+ppExpr GetStar {val} = "get*" <> parens (ppExpr val)
 ppExpr Yield {val} = "yield" <> parens (ppExpr val)
 ppExpr Forward {forwardExpr} = "forward" <> parens (ppExpr forwardExpr)
 ppExpr Eos {} = "eos"

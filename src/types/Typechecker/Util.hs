@@ -48,6 +48,7 @@ module Typechecker.Util(TypecheckM
                        ,checkConjunction
                        ,includesMarkerTrait
                        ,assertNotNestedFlow
+                       ,stripType
                        ) where
 
 import Identifiers

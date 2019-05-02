@@ -206,6 +206,7 @@ reservedNames =
     ,"for"
     ,"fun"
     ,"forward"
+    ,"get*"
     ,"if"
     ,"import"
     ,"in"
@@ -294,11 +295,21 @@ reservedOp op = do
 identifier :: EncParser String
 identifier = (lexeme . try) (p >>= check)
   where
-    p = (:) <$> letterChar <*> many validIdentifierChar
+    p = specialIdentifiers <|> ((:) <$> letterChar <*> many validIdentifierChar)
     check x = if x `elem` reservedNames
               then fail $ "Reserved keyword " ++ show x ++
                           " cannot be used as an identifier"
               else return x
+    -- This is a rather ugly hack. But if we don't allow * to appear in some
+    -- specific function names, get*(x) is parsed as operator * applied to 
+    -- symbols get and x. Parsing get* as an operator doesn't solve the problem
+    -- elegantly, as it allows us to write get* x ; since, get x isn't allowed
+    -- get* x shouldn't be allowed either, for consistency.
+    --
+    -- specialIdentifiers should be tried first when parsing identifiers, 
+    -- otherwise get*(x) will be parsed as "get" "*" "(x)" deafeating the 
+    -- purpose of the function.
+    specialIdentifiers = symbol "get*" 
 
 dot        = symbol "."
 bang       = symbol "!"
@@ -1019,7 +1030,9 @@ expression = makeExprParser expr opTable
                  [consume],
                  [typedExpression],
                  [singleLineTask],
+                 [singleLineTaskStar],
                  [chain],
+                 [chainStar],
                  [assignment,
                   op "+=" PLUS_EQUALS,
                   op "-=" MINUS_EQUALS,
@@ -1078,9 +1091,17 @@ expression = makeExprParser expr opTable
                    (emeta, _) <- withEnd $ reserved "async"
                    return (Async emeta))
 
+      singleLineTaskStar =
+        Prefix (do notFollowedBy (reserved "async*" >> nl)
+                   (emeta, _) <- withEnd $ reserved "async*"
+                   return (AsyncStar emeta))
+
       chain =
           InfixL (do (emeta, _) <- withEnd . withLinebreaks $ reservedOp "~~>"
                      return (FutureChain emeta))
+      chainStar = 
+          InfixL (do (emeta, _) <- withEnd . withLinebreaks $ reservedOp "~~>*"
+                     return (FutureChainStar emeta))
       partySequence =
           InfixL (do (emeta, _) <- withEnd $ reservedOp ">>"
                      return (PartySeq emeta))
@@ -1102,6 +1123,7 @@ expr = notFollowedBy nl >>
      <|> match
      <|> borrow
      <|> blockedTask
+     <|> blockedTaskStar
      <|> for
      <|> while
      <|> repeat
@@ -1556,6 +1578,11 @@ expr = notFollowedBy nl >>
         emeta <- buildMeta
         reserved "async"
         return $ \body -> Async{emeta, body}
+
+      blockedTaskStar = blockedConstruct $ do
+        emeta <- buildMeta
+        reserved "async*"
+        return $ \body -> AsyncStar{emeta, body}
 
       arraySize = do
         emeta <- buildMeta

@@ -84,6 +84,7 @@ getChildren (MaybeValue _ (JustData e)) = [e]
 getChildren (MaybeValue _ NothingData) = []
 getChildren Tuple {args} = args
 getChildren Async {body} = [body]
+getChildren AsyncStar {body} = [body]
 getChildren Let {body, decls} = body : map snd decls
 getChildren MiniLet {decl = (_, val)} = [val]
 getChildren Seq {eseq} = eseq
@@ -102,6 +103,7 @@ getChildren Match {arg, clauses} = arg:getChildrenClauses clauses
         [mcpattern, mchandler, mcguard]
 getChildren Borrow {target, body} = [target, body]
 getChildren Get {val} = [val]
+getChildren GetStar {val} = [val]
 getChildren Forward {forwardExpr} = [forwardExpr]
 getChildren Yield {val} = [val]
 getChildren Eos {} = []
@@ -111,6 +113,7 @@ getChildren Await {val} = [val]
 getChildren Return {val} = [val]
 getChildren Suspend {} = []
 getChildren FutureChain {future, chain} = [future, chain]
+getChildren FutureChainStar {future, chain} = [future, chain]
 getChildren FieldAccess {target} = [target]
 getChildren ArrayAccess {target, index} = [target, index]
 getChildren ArraySize {target} = [target]
@@ -161,6 +164,7 @@ putChildren [l, r] e@(PartyPar {}) = e{parl=l, parr=r}
 putChildren [pinit, par, seqfun] e@(PartyReduce {}) = e{par=par, seqfun=seqfun, pinit=pinit}
 putChildren [body] e@(Closure {}) = e{body = body}
 putChildren [body] e@(Async {}) = e{body = body}
+putChildren [body] e@(AsyncStar {}) = e{body = body}
 putChildren [body] e@(MaybeValue _ (JustData _)) = e{mdt = JustData body}
 putChildren [] e@(MaybeValue _ NothingData) = e
 putChildren args e@(Tuple {}) = e{args = args}
@@ -184,6 +188,7 @@ putChildren (arg:clauseList) e@(Match {clauses}) =
               error "Util.hs: Wrong number of children of of match clause"
 putChildren [target, body] e@(Borrow {}) = e{target, body}
 putChildren [val] e@(Get {}) = e{val = val}
+putChildren [val] e@(GetStar {}) = e{val = val}
 putChildren [forwardExpr] e@(Forward {}) = e{forwardExpr = forwardExpr}
 putChildren [val] e@(Yield {}) = e{val = val}
 putChildren [] e@(Eos {}) = e
@@ -193,6 +198,7 @@ putChildren [val] e@(Await {}) = e{val = val}
 putChildren [val] e@(Return {}) = e{val = val}
 putChildren [] e@(Suspend {}) = e
 putChildren [future, chain] e@(FutureChain {}) = e{future = future, chain = chain}
+putChildren [future, chain] e@(FutureChainStar {}) = e{future = future, chain = chain}
 putChildren [target] e@(FieldAccess {}) = e{target = target}
 putChildren [target, index] e@(ArrayAccess {}) = e{target = target, index = index}
 putChildren [target] e@(ArraySize {}) = e{target = target}
@@ -239,6 +245,7 @@ putChildren _ e@(PartyPar {}) = error "'putChildren l PartyPar' expects l to hav
 putChildren _ e@(PartyReduce {}) = error "'putChildren l PartyReduce' expects l to have 3 elements"
 putChildren _ e@(Closure {}) = error "'putChildren l Closure' expects l to have 1 element"
 putChildren _ e@(Async {}) = error "'putChildren l Async' expects l to have 1 element"
+putChildren _ e@(AsyncStar {}) = error "'putChildren l AsyncStar' expects l to have 1 element" 
 putChildren _ e@(Let{decls}) = error "'putChildren l Let' expects l to have at least 1 element"
 putChildren _ e@(MiniLet{decl}) = error "'putChildren l MiniLet' expects l to have 1 element"
 putChildren _ e@(IfThenElse {}) = error "'putChildren l IfThenElse' expects l to have 3 elements"
@@ -251,6 +258,7 @@ putChildren _ e@(For {}) = error "'putChildren l For' expects l to have 3 elemen
 putChildren _ e@(Match {}) = error "'putChildren l Match' expects l to have at least 1 element"
 putChildren _ e@(Borrow {}) = error "'putChildren l Borrow' expects l to have 2 element"
 putChildren _ e@(Get {}) = error "'putChildren l Get' expects l to have 1 element"
+putChildren _ e@(GetStar {}) = error "'putChildren l GetStar' expects l to have 1 element"
 putChildren _ e@(Forward {}) = error "'putChildren l Forward' expects l to have 1 element"
 putChildren _ e@(Yield {}) = error "'putChildren l Yield' expects l to have 1 element"
 putChildren _ e@(Eos {}) = error "'putChildren l Eos' expects l to have 0 elements"
@@ -260,6 +268,7 @@ putChildren _ e@(Await {}) = error "'putChildren l Await' expects l to have 1 el
 putChildren _ e@(Return {}) = error "'putChildren l Return' expects l to have 1 element"
 putChildren _ e@(Suspend {}) = error "'putChildren l Suspend' expects l to have 0 elements"
 putChildren _ e@(FutureChain {}) = error "'putChildren l FutureChain' expects l to have 2 elements"
+putChildren _ e@(FutureChainStar {}) = error "'putChildren l FutureChainStar' expects l to have 2 elements"
 putChildren _ e@(FieldAccess {}) = error "'putChildren l FieldAccess' expects l to have 1 element"
 putChildren _ e@(ArrayAccess {}) = error "'putChildren l ArrayAccess' expects l to have 2 elements"
 putChildren _ e@(ArraySize {}) = error "'putChildren l ArraySize' expects l to have 1 element"

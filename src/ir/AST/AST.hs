@@ -649,6 +649,8 @@ data Expr = Skip {emeta :: Meta Expr}
                          runassoc :: Bool}
           | Async {emeta :: Meta Expr,
                    body :: Expr}
+          | AsyncStar {emeta :: Meta Expr,
+                       body :: Expr}
           | Return {emeta :: Meta Expr,
                     val :: Expr}
           | MaybeValue {emeta :: Meta Expr,
@@ -698,6 +700,8 @@ data Expr = Skip {emeta :: Meta Expr}
                     body   :: Expr}
           | Get {emeta :: Meta Expr,
                  val :: Expr}
+          | GetStar {emeta :: Meta Expr,
+                     val :: Expr}
           | Forward {emeta :: Meta Expr,
                      forwardExpr :: Expr}
           | Yield {emeta :: Meta Expr,
@@ -713,6 +717,9 @@ data Expr = Skip {emeta :: Meta Expr}
           | FutureChain {emeta :: Meta Expr,
                          future :: Expr,
                          chain :: Expr}
+          | FutureChainStar {emeta:: Meta Expr,
+                             future :: Expr,
+                             chain :: Expr}
           | FieldAccess {emeta :: Meta Expr,
                          target :: Expr,
                          name :: Name}
@@ -826,6 +833,7 @@ isNull _ = False
 
 isTask :: Expr -> Bool
 isTask Async {} = True
+isTask AsyncStar {} = True
 isTask _ = False
 
 isRangeLiteral :: Expr -> Bool
@@ -894,6 +902,7 @@ isImpure _ = False
 hasBody :: Expr -> Bool
 hasBody Closure {} = True
 hasBody Async {} = True
+hasBody AsyncStar {} = True
 hasBody Let {} = True
 hasBody IfThenElse {} = True
 hasBody IfThen {} = True

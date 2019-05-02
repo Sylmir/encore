@@ -75,6 +75,7 @@ module Types(
             ,getArgTypes
             ,setArgTypes
             ,getResultType
+            ,getFlowResultType
             ,getId
             ,maybeGetId
             ,alphaConvert
@@ -359,6 +360,17 @@ setArgTypes ty argTypes = applyInner (\i -> i{argTypes}) ty
 getResultType ty
     | hasResultType ty = resultType . inner $ ty
     | otherwise = error $ "Types.hs: tried to get the resultType of " ++ show ty
+
+getFlowResultType ty
+    | isFlowType ty = stripFlow $ (getResultType ty)
+    | otherwise = error $ "Types.hs: tried to get the flowResultType of " ++ 
+                          (show ty)
+    where
+      stripFlow :: Type -> Type
+      stripFlow ty 
+        | isFlowType ty = stripFlow $ getResultType ty
+        | otherwise = ty
+
 getId ty =
     fromMaybe
       (error $ "Types.hs: Tried to get the ID of " ++ showWithKind ty)
