@@ -977,18 +977,65 @@ stripTypeN ty check = runState (stripTypeNM ty check) 0
         stripTypeNM (getResultType ty) check
       | otherwise = return ty
 
--- Check that a type is not Flow[Flow[...]]. The semantics of Flow don't allow
--- Flow[Flow[...]] to appear, except when dealing with type application. As
--- such, construct Flow[t] is allowed to generate Flow[Flow[T]], with 
--- T != Flow, but Flow[Flow[...]] cannot be written explicitly.
+-- Check that a type is not Flow[Flow[...]]. The semantics of flow don't allow 
+-- the construct Flow[Flow[T]] to explicitly appear. The only exception is in 
+-- the case of a parametric type.
+--
+-- All these rules must be applied before resolving type variables.
+-- Rules :
+--  * Flow[Flow[T]], with T not a type variable, is forbidden
+--  * Flow[T], with T a synonym resolving to Flow[U], where U is not a type
+-- variable is forbidden
+--  * Flow[t] with t a type variable, possibly resolving to Flow[U], with U a 
+-- type or synonym, is allowed
+--  * T[Flow[U]], with T a synonym over a type variable t bound to type Flow[U], 
+-- where T[t] expands to Flow[t], is allowed. 
+--
+-- There are four places we can encounter nested Flows :
+--  * Functions / methods parameters
+--  * Functions / methods return types
+--  * Field types
+--  * Typedefs
+-- 
+-- Nested Flows may come in two different ways : through explicit nesting, 
+-- eventually using type synonyms ; or through implicit nesting, using type
+-- variables. The first case is rather easy to deal with, as we don't need to 
+-- expand types. The second case is much harder as we need to partially apply
+-- type variables in order to deduce if a Flow[Flow[T]] construct would appear. 
+--
+-- Here are a few examples :
+--  1) fun f(x : Flow[Flow[int]]) : Flow[Flow[int]] -> this is wrong, because 
+-- parameter x and the return type are both explicitly nested Flows
+--  2) fun f[t](x : Flow[Flow[t]]) : t -> this is wrong, because parameter x 
+-- is an explicitly nested Flow, regardless of the fact that there is a type 
+-- parameter
+--  3) typedef T = Flow[int]; fun f() : Flow[T] -> this is wrong, because the 
+-- return type of f expands to Flow[Flow[int]]
+--  4) typedef T[t] = Flow[t]; fun f() : Flow[T] -> this is wrong, because the
+-- return type of f expands to Flow[Flow[t]], regardless of the fact that there 
+-- is a type parameter
+--  5) typedef T[t] = Flow[t]; fun f() : T[Flow[int]] -> this is correct, as we 
+-- don't perform type variable resolution. We read T[Flow[int]] as Flow[t]. Note
+-- that this example merely reverses the order of type parameters in regard to 
+-- example 4). 4) is wrong, and 5) is correct.
 assertNotNestedFlow :: Type -> TypecheckM Bool
 assertNotNestedFlow ty
+  -- This is the Flow[Flow[]] case, written as-is (no type variable expansion)
   | isFlowType ty && isFlowType (getResultType ty) = tcError $ ExplicitNestedFlowError ty
   | isFlowType ty = do
-    result <- resolveType $ getResultType ty
-    if isFlowType result then
-      tcError $ ExplicitNestedFlowSynonymError ty $ getResultType ty
-    else
+    let resultType = getResultType ty
+    -- Flow[t] is always accepted
+    if isTypeVar resultType then
       return True
+    else do
+      -- If we are seeing Flow[Something], we must resolve Something to check
+      -- if it is Flow. The tricky part comes when trying to resolve Something.
+      -- We must make sure we are not accidentally resolving a type parameter.
+      --
+      -- TODO : finish this nightmare
+      result <- resolveType resultType
+      if isFlowType result then
+        tcError $ ExplicitNestedFlowSynonymError ty resultType
+      else
+        return True
   | otherwise = return True
-      
