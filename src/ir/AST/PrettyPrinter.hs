@@ -239,6 +239,7 @@ isSimple VarAccess {} = True
 isSimple FieldAccess {target} = isSimple target
 isSimple MethodCall {target} = isSimple target
 isSimple MessageSend {target} = isSimple target
+isSimple MessageSendFlow {target} = isSimple target
 isSimple FunctionCall {} = True
 isSimple _ = False
 
@@ -289,6 +290,10 @@ ppExpr MethodCall {target, name, args, typeArguments} =
       parens (commaSep (map ppExpr args))
 ppExpr MessageSend {target, name, args, typeArguments} =
     maybeParens target <> "!" <> ppName name <>
+      withTypeArguments typeArguments <>
+      parens (commaSep (map ppExpr args))
+ppExpr MessageSendFlow {target, name, args, typeArguments} =
+    maybeParens target <> "!!" <> ppName name <>
       withTypeArguments typeArguments <>
       parens (commaSep (map ppExpr args))
 ppExpr PartySeq {par, seqfunc} = ppExpr par <+> ">>" <+> parens (ppExpr seqfunc)

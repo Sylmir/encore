@@ -313,6 +313,7 @@ identifier = (lexeme . try) (p >>= check)
 
 dot        = symbol "."
 bang       = symbol "!"
+bangbang   = symbol "!!"
 bar        = symbol "|"
 dotdot     = symbol ".."
 colon      = symbol ":"
@@ -1026,7 +1027,7 @@ expression = makeExprParser expr opTable
                  [op "&&" Identifiers.AND,
                   op "||" Identifiers.OR],
                  [arrayAccess],
-                 [messageSend],
+                 [messageSendFlow, messageSend],
                  [consume],
                  [typedExpression],
                  [singleLineTask],
@@ -1085,6 +1086,20 @@ expression = makeExprParser expr opTable
                                                     ,target
                                                     ,name
                                                     ,args}))
+
+      messageSendFlow =
+        Postfix (do (emeta, (name, typeArguments, args)) <- withEnd $ do
+                      withLinebreaks bangbang
+                      name <- Name <$> identifier
+                      typeArguments <-
+                        option [] (try . brackets $ commaSep typ)
+                      args <- parens arguments
+                      return (name, typeArguments, args)
+                    return (\target -> MessageSendFlow{emeta
+                                                      ,typeArguments
+                                                      ,target
+                                                      ,name
+                                                      ,args}))
 
       singleLineTask =
         Prefix (do notFollowedBy (reserved "async" >> nl)

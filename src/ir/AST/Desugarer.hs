@@ -579,13 +579,15 @@ desugar f@FunctionCall{emeta
                       ,qname = QName{qnlocal = Name "get"}
                       ,args = [val]} = Get{emeta, val}
 desugar f@FunctionCall{emeta
-                      ,qname = QName{qnlocal = Name "get*"}
-                      ,args = [val]} = GetStar{emeta, val}
-desugar f@FunctionCall{emeta
                       ,qname = QName{qnlocal = Name "await"}
                       ,args = [val]} = Await{emeta, val}
 desugar f@FunctionCall{emeta, qname = QName{qnlocal = Name "getNext"}
                       ,args = [target]} = StreamNext{emeta, target}
+
+-- Operations on flows
+desugar f@FunctionCall{emeta
+                      ,qname = QName{qnlocal = Name "get*"}
+                      ,args = [val]} = GetStar{emeta, val}
 
 -- Operations on ParT
 desugar f@FunctionCall{emeta

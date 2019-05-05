@@ -49,6 +49,7 @@ module Typechecker.Util(TypecheckM
                        ,includesMarkerTrait
                        ,assertNotNestedFlow
                        ,stripType
+                       ,stripFlow
                        ) where
 
 import Identifiers
@@ -977,6 +978,9 @@ stripTypeN ty check = runState (stripTypeNM ty check) 0
         put $ state + 1
         stripTypeNM (getResultType ty) check
       | otherwise = return ty
+
+stripFlow :: Type -> Type
+stripFlow ty = stripType ty isFlowType
 
 -- Check that a type is not Flow[Flow[...]]. The semantics of flow don't allow 
 -- the construct Flow[Flow[T]] to explicitly appear. The only exception is in 

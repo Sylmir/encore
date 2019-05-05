@@ -616,6 +616,11 @@ data Expr = Skip {emeta :: Meta Expr}
                          target :: Expr,
                          name :: Name,
                          args :: Arguments}
+          | MessageSendFlow {emeta :: Meta Expr,
+                             typeArguments :: [Type],
+                             target :: Expr,
+                             name :: Name,
+                             args :: Arguments}
           | Optional {emeta :: Meta Expr,
                       optTag :: OptionalPathComponent}
           | AdtExtractorPattern {emeta :: Meta Expr,
@@ -789,7 +794,7 @@ isLval FieldAccess {} = True
 isLval ArrayAccess {} = True
 isLval _ = False
 
-isMethodCallOrMessageSend e = isMethodCall e || isMessageSend e
+isMethodCallOrMessageSend e = isMethodCall e || isMessageSend e || isMessageSendFlow e
 
 isMethodCall :: Expr -> Bool
 isMethodCall MethodCall {} = True
@@ -798,6 +803,10 @@ isMethodCall _ = False
 isMessageSend :: Expr -> Bool
 isMessageSend MessageSend {} = True
 isMessageSend _ = False
+
+isMessageSendFlow :: Expr -> Bool
+isMessageSendFlow MessageSendFlow {} = True
+isMessageSendFlow _ = False
 
 isFunctionCall :: Expr -> Bool
 isFunctionCall FunctionCall {} = True
@@ -887,6 +896,7 @@ isValidPattern e
 isImpure :: Expr -> Bool
 isImpure MethodCall {} = True
 isImpure MessageSend {} = True
+isImpure MessageSendFlow {} = True
 isImpure FunctionCall {} = True
 isImpure While {} = True
 isImpure StreamNext {} = True
@@ -918,6 +928,7 @@ findRoot :: Expr -> Expr
 findRoot FieldAccess{target} = findRoot target
 findRoot MethodCall{target} = findRoot target
 findRoot MessageSend{target} = findRoot target
+findRoot MessageSendFlow{target} = findRoot target
 findRoot TupleAccess{target} = findRoot target
 findRoot e = e
 

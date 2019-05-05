@@ -762,8 +762,15 @@ instance Checkable Expr where
             let isThisCall = isThisAccess (target mcall)
                 isStream = isStreamMethodHeader header
                 isAsync = isMessageSend mcall
-                returnType' = if isAsync && isThisCall
-                              then futureType returnType
+                isFlowAsync = isMessageSendFlow mcall
+                returnType' = if isThisCall then 
+                                if isAsync then 
+                                  futureType returnType
+                                else
+                                  if isFlowAsync then 
+                                    flowType $ stripFlow returnType
+                                  else
+                                    returnType
                               else returnType
 
             when (isStream && isThisCall) $ tcError SyncStreamCall
@@ -778,7 +785,7 @@ instance Checkable Expr where
             when (isMainMethod targetType name) $ tcError MainMethodCallError
 
           handleErrors targetType m
-            | isMessageSend m = do
+            | isMessageSend m || isMessageSendFlow m = do
               errorInitMethod targetType (name m)
               isActive <- isActiveType targetType
               isShared <- isSharedType targetType
