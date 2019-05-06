@@ -295,21 +295,11 @@ reservedOp op = do
 identifier :: EncParser String
 identifier = (lexeme . try) (p >>= check)
   where
-    p = specialIdentifiers <|> ((:) <$> letterChar <*> many validIdentifierChar)
+    p = ((:) <$> letterChar <*> many validIdentifierChar)
     check x = if x `elem` reservedNames
               then fail $ "Reserved keyword " ++ show x ++
                           " cannot be used as an identifier"
               else return x
-    -- This is a rather ugly hack. But if we don't allow * to appear in some
-    -- specific function names, get*(x) is parsed as operator * applied to 
-    -- symbols get and x. Parsing get* as an operator doesn't solve the problem
-    -- elegantly, as it allows us to write get* x ; since, get x isn't allowed
-    -- get* x shouldn't be allowed either, for consistency.
-    --
-    -- specialIdentifiers should be tried first when parsing identifiers, 
-    -- otherwise get*(x) will be parsed as "get" "*" "(x)" deafeating the 
-    -- purpose of the function.
-    specialIdentifiers = symbol "get*" 
 
 dot        = symbol "."
 bang       = symbol "!"
@@ -1132,6 +1122,7 @@ expression = makeExprParser expr opTable
 expr :: EncParser Expr
 expr = notFollowedBy nl >>
         (embed
+     <|> getStar
      <|> break
      <|> continue
      <|> closure
@@ -1562,6 +1553,12 @@ expr = notFollowedBy nl >>
         reserved "forward"
         forwardExpr <- parens expression
         returnWithEnd Forward{emeta, forwardExpr}
+
+      getStar = do
+        emeta <- buildMeta
+        reserved "get*"
+        getStarExpr <- parens expression
+        returnWithEnd GetStar{emeta=emeta, val=getStarExpr}
 
       closure = do
         indent <- L.indentLevel
