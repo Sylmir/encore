@@ -47,9 +47,10 @@ module Typechecker.Util(TypecheckM
                        ,isSharableType
                        ,checkConjunction
                        ,includesMarkerTrait
-                       ,assertNotNestedFlow
+                       ,checkNotNestedFlow
                        ,stripType
                        ,stripFlow
+                       ,collapseFlow
                        ) where
 
 import Identifiers
@@ -1023,10 +1024,11 @@ stripFlow ty = stripType ty isFlowType
 -- don't perform type variable resolution. We read T[Flow[int]] as Flow[t]. Note
 -- that this example merely reverses the order of type parameters in regard to 
 -- example 4). 4) is wrong, and 5) is correct.
-assertNotNestedFlow :: Type -> TypecheckM Bool
-assertNotNestedFlow ty
+checkNotNestedFlow :: Type -> TypecheckM Bool
+checkNotNestedFlow ty
   -- This is the Flow[Flow[]] case, written as-is (no type variable expansion)
-  | isFlowType ty && isFlowType (getResultType ty) = tcError $ ExplicitNestedFlowError ty
+  | isFlowType ty && isFlowType (getResultType ty) = 
+      (tcWarning $ ExplicitNestedFlowWarning ty) >> return True
   | isFlowType ty = do
     let resultType = getResultType ty
     -- Flow[t] is always accepted
@@ -1039,8 +1041,20 @@ assertNotNestedFlow ty
       --
       -- TODO : finish this nightmare
       result <- resolveType resultType
-      if isFlowType result then
-        tcError $ ExplicitNestedFlowSynonymError ty resultType
-      else
-        return True
+      when (isFlowType result)
+        (tcWarning $ ExplicitNestedFlowSynonymWarning ty resultType)
+      return True
   | otherwise = return True
+
+-- Collapse the Flows in a parametric type
+-- Array[Flow[Flow[int]]] -> Array[Flow[int]]
+-- Flow[Fut[Flow[Flow[int]]]] -> Flow[Fut[Flow[int]]]
+collapseFlow :: Type -> TypecheckM Type
+collapseFlow ty
+  | hasResultType ty = 
+      let result =  if isFlowType ty then
+                      collapseFlow (stripFlow ty)
+                    else
+                      collapseFlow (getResultType ty)
+      in result >>= \collapsed -> return $ setResultType ty collapsed
+  | otherwise = return ty

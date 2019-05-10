@@ -342,8 +342,6 @@ data Error =
   | UnsafeTypeArgumentError Type Type
   | OverlapWithBuiltins
   | SimpleError String
-  | ExplicitNestedFlowError Type
-  | ExplicitNestedFlowSynonymError Type Type
   ----------------------------
   -- Capturechecking errors --
   ----------------------------
@@ -914,10 +912,6 @@ instance Show Error where
     show OverlapWithBuiltins =
       printf ("Types Maybe, Fut, Stream, Par and Flow are built-in and cannot be redefined.")
     show (SimpleError msg) = msg
-    show (ExplicitNestedFlowError ty) =
-        printf ("Explicitly nesting Flows is forbidden : %s") (show ty)
-    show (ExplicitNestedFlowSynonymError top bottom) =
-        printf ("Explicitly nesting flows is forbidden (in synonym %s, %s resolves to Flow)") (show top) (show bottom)
     ----------------------------
     -- Capturechecking errors --
     ----------------------------
@@ -986,6 +980,8 @@ data Warning = StringDeprecatedWarning
              | SharedArrayWarning
              | CapabilitySplitWarning
              | ShadowingADTCaseWarning Name
+             | ExplicitNestedFlowWarning Type
+             | ExplicitNestedFlowSynonymWarning Type Type
 
 instance Show Warning where
     show StringDeprecatedWarning =
@@ -1018,3 +1014,8 @@ instance Show Warning where
     show (ShadowingADTCaseWarning name) =
         "Variable '" ++ show name ++ "' shadows ADT case of same name. " ++
         "You most likely want to write '" ++ show name ++ "()'."
+    show (ExplicitNestedFlowWarning ty) =
+        printf ("Explicitly nesting Flows is not necessary : %s") (show ty)
+    show (ExplicitNestedFlowSynonymWarning top bottom) =
+        printf ("Explicitly nesting flows is not necessary (in synonym %s, %s resolves to Flow)") (show top) (show bottom)
+    

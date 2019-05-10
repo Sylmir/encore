@@ -221,10 +221,12 @@ matchArgumentLength targetType header args =
 meetRequiredFields :: [FieldDecl] -> Type -> TypecheckM ()
 meetRequiredFields cFields trait = do
   tdecl <- findTrait trait
+  trace ("meetRequiredFields (" ++ (show trait) ++ ") : ") $ mapM_ traceField (requiredFields tdecl)
   mapM_ matchField (requiredFields tdecl)
     where
     matchField tField = do
       expField <- findField trait (fname tField)
+      traceField expField
       let expected = ftype expField
           result = find (==expField) cFields
           cField = fromJust result
@@ -241,6 +243,9 @@ meetRequiredFields cFields trait = do
         when (isVarField expField) $
              unless (isVarField cField) $
                  tcError $ RequiredFieldMutabilityError trait cField
+
+    traceField :: FieldDecl -> TypecheckM ()
+    traceField field = trace ("(mrf) Field " ++ (show $ fname field) ++ " of type " ++ (show $ ftype field)) $ return ()
 
 noOverlapFields :: Type -> Maybe TraitComposition -> TypecheckM ()
 noOverlapFields cname composition =
@@ -476,6 +481,8 @@ instance Checkable ClassDecl where
     emethods <- local (addTypeVars . addThis) $
                 mapM typecheck cmethods
 
+    -- mapM_ traceField efields
+
     checkOverriding cname typeParameters cmethods extendedTraits
 
     return c{cmethods = emethods, cfields = efields}
@@ -504,6 +511,9 @@ instance Checkable ClassDecl where
             unless (isJust lookupResult || name `elem` extensions) $
                 tcError $ UnmodedMethodExtensionError cname name
 
+      traceField :: FieldDecl -> TypecheckM ()
+      traceField field = 
+        trace ("Field " ++ (show field) ++ " of type " ++ (show $ ftype field)) $ return ()
 
 instance Checkable MethodDecl where
     --  E, x1 : t1, .., xn : tn |- mbody : mtype
@@ -773,6 +783,7 @@ instance Checkable Expr where
                                     returnType
                               else returnType
 
+            when (isFlowAsync) $ trace ("Handling method call, isThisCall = " ++ (show isThisCall) ++ ", isAsync = " ++ (show isAsync) ++ ", isFlowAsync = " ++ (show isFlowAsync) ++ ", returnType = " ++ (show returnType) ++ ", returnType' = " ++ (show returnType')) $ return ()
             when (isStream && isThisCall) $ tcError SyncStreamCall
             return $ setArrowType (arrowType argTypes resultType) $
                      setType returnType' mcall {target = eTarget'
@@ -2319,17 +2330,6 @@ matchTypes expected ty
         ty `assertSubtypeOf` expected
         asks bindings
 
-      -- Strip a Flow[T] to the first non T type.
-      -- If T != Flow[T'], stripFlow T = T
-      -- If T = Flow[T'], stripFlow T = stripFlow T'
-      --
-      -- Examples : stripFlow Flow[Flow[int]] = int
-      --            stripFlow int             = int
-      stripFlow :: Type -> Type
-      stripFlow ty'
-        | (not . isFlowType) ty'  = ty'
-        | otherwise               = stripFlow $ getResultType ty'
-
       -- UNUSED
       -- Attempt to allow multiple subtyping rules to be handled similarily.
 
@@ -2422,7 +2422,9 @@ retType mcall targetType header t = do
   then return t
   else if isStreamMethodHeader header
   then return $ streamType t
-  else return $ futureType t
+  else if isMessageSendFlow mcall
+  then collapseFlow $ flowType t
+  else return $ futureType t  
 
 typecheckPrivateModifier target name = do
   let targetType = AST.getType target
