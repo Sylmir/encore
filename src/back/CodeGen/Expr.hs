@@ -65,6 +65,7 @@ typeToPrintfFstr ty
     | Ty.isFutureType ty       = "Fut@%p"
     | Ty.isStreamType ty       = "Stream@%p"
     | Ty.isParType ty          = "Par@%p"
+    | Ty.isFlowType ty         = "Flow@%p"
     | Ty.isArrowType ty        = "(" ++ show ty ++ ")@%p"
     | Ty.isArrayType ty        = show ty ++ "@%p"
     | Ty.isRangeType ty        = "[%d..%d by %d]"

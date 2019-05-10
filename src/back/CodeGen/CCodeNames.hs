@@ -113,6 +113,9 @@ flow = Ptr $ Typ "flow_t"
 futNam :: CCode Name
 futNam = Nam "_fut"
 
+flowNam :: CCode Name
+flowNam = Nam "_flow"
+
 capability :: CCode Ty
 capability = Ptr $ Typ "capability_t"
 
@@ -139,6 +142,9 @@ just = Var "JUST"
 
 futVar :: CCode Lval
 futVar = Var "_fut"
+
+flowVar :: CCode Lval
+flowVar = Var "_flow"
 
 encoreAssert :: CCode Expr -> CCode Stat
 encoreAssert p =
@@ -466,6 +472,9 @@ futureChainActor = Nam "future_chain_actor"
 
 futureChainWithFut :: CCode Name
 futureChainWithFut = Nam "future_chain_with_fut"
+
+flowTraceFn :: CCode Name
+flowTraceFn = Nam "flow_trace"
 
 actorSuspend :: CCode Name
 actorSuspend = Nam "actor_suspend"
