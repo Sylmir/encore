@@ -170,6 +170,14 @@ fun spawn[sharable t](task : () -> t) : Fut[t]
   end
 end
 
+fun spawn_star[sharable t](task : () -> t) : Flow[t]
+  let
+    runner = new TaskRunner()
+  in
+    runner !! perform(task)
+  end
+end
+
 active class TaskRunner
   def perform[sharable t](task : () -> t) : t
     task()

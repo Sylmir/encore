@@ -99,10 +99,10 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                                            AsExpr $ (Var "msg") `Arrow` (Nam "argv")]]])
        methodClauses = concatMap methodClause
 
-       methodClause m = (mthdDispatchClause m mArgs) :
-                         if not (A.isStreamMethod m)
-                         then [oneWaySendDispatchClause m mArgs]
-                         else []
+       methodClause m = mthdDispatchClause m mArgs ++
+                        if not (A.isStreamMethod m)
+                        then [oneWaySendDispatchClause m mArgs]
+                        else []
          where
            mArgs = (A.methodName &&& A.methodParams) m
 
@@ -126,22 +126,26 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
 
        mthdDispatchClause mdecl (mName, mParams)
            | A.isStreamMethod mdecl =
-               (futMsgId cname mName,
-                Seq $ unpackFuture : arguments' ++
-                      gcReceive ++ [streamMethodCall])
+               [(futMsgId cname mName,
+                Seq $ unpackFuture : arguments' futMsgTypeName ++
+                      gcReceive futVar futureTypeRecName ++ [streamMethodCall])]
            | otherwise =
-               (futMsgId cname mName,
-                Seq $ unpackFuture : arguments' ++
-                      gcReceive ++ [pMethodDecl, methodCall])
+               [(futMsgId cname mName,
+                 Seq $ unpackFuture : arguments' futMsgTypeName ++
+                       gcReceive futVar futureTypeRecName ++ [pMethodDecl, methodCall])
+                ,(flowMsgId cname mName,
+                  Seq $ unpackFlow : arguments' flowMsgTypeName ++
+                        gcReceive flowVar flowTypeRecName ++ [pMethodDecl, methodCallFlow])]
+
            where
              (pMethodArrName, pMethodDecl) = arrMethodTypeVars mdecl
-             arguments' = arguments mdecl (futMsgTypeName cname mName)
-             gcReceive  =
+             arguments' name = arguments mdecl (name cname mName)
+             gcReceive var name =
                  gcRecv mParams
                  (Statement $ Call ponyTraceObject
                                    (includeCtx
-                                      [futVar,
-                                       futureTypeRecName `Dot` Nam "trace"]))
+                                      [var,
+                                       name `Dot` Nam "trace"]))
              streamMethodCall =
                  Statement $ Call (methodImplName cname mName)
                                   (encoreCtxVar :
@@ -161,6 +165,20 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                                 pMethodArrName :
                                 map (AsLval . argName . A.pname) mParams))]
                else forwardMethodCall mName pMethodArrName mParams futVar
+
+             methodCallFlow = 
+               if null $ Util.filter A.isForward (A.mbody mdecl)
+               then Statement $ 
+                        Call flowFulfilFn
+                        [AsExpr encoreCtxVar,
+                         AsExpr flowVar,
+                         asEncoreArgT (translate $ A.methodType mdecl)
+                         (Call (methodImplName cname mName)
+                               (encoreCtxVar : thisVar :
+                               pMethodArrName :
+                               map (AsLval . argName . A.pname) mParams))]
+               else Seq [Call (Nam "fprintf") [AsExpr stderr, (String "Can't use forward in a flow call (yet ?)")],
+                         Call (Nam "exit") [Int 1]]
 
        forwardMethodCall = \mName pMethodArrName mParams lastArg ->
                              Call (forwardingMethodImplName cname mName)
@@ -189,6 +207,12 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
          let
            lval = Decl (future, futVar)
            rval = (Cast (Ptr $ encMsgT) (Var "_m")) `Arrow` futNam
+         in
+           Assign lval rval
+       unpackFlow =
+         let
+           lval = Decl (flow, flowVar)
+           rval = (Cast (Ptr $ encFlowMsgT) (Var "_m")) `Arrow` flowNam
          in
            Assign lval rval
 

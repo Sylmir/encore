@@ -4,20 +4,10 @@
 /// Attributes for the mutex in flow_t.
 static pthread_mutexattr_t attr;
 
-/**
- * Possible types for the next Flow in a chain. See below for examples.
- */
- enum result_type_e {
-  /// Next Flow is a Flow
-  FLOW,
-  /// Next Flow is a usable value
-  VALUE
-};
-
 struct flow_s 
 {
   /// Type of the next Flow in the chain
-  result_type_t result_type;
+  flow_result_type_t result_type;
   /**
    * Next Flow in the chain. We use encore_arg_t to have an interface similar
    * to what is found in the future library. 
@@ -108,9 +98,18 @@ struct flow_s
  * => async* fact'(2, 3) => async* fact'(1, 6). 
  */
 
+/// Initialize the pthread_mutexattr_t global object.
 static void init_mutexattr();
+
+/// Dummy function
 static void init_mutexattr_dummy();
+
 static void flow_finalize(void*);
+
+static void flow_block_actor();
+
+/// Pointer to the function used to initialize the global pthread_mutexattr_t
+/// object. This prevents the object from being initialized multiple times.
 static void (*init_attr)() = &init_mutexattr;
 
 pony_type_t flow_type = {
@@ -120,7 +119,7 @@ pony_type_t flow_type = {
   .final = flow_finalize
 };
 
-flow_t* flow_mk(pony_ctx_t** cttx, pony_type_t* type, result_type_t result_type)
+flow_t* flow_mk(pony_ctx_t** cttx, pony_type_t* type, flow_result_type_t result_type)
 {
   init_attr();
 
@@ -129,6 +128,9 @@ flow_t* flow_mk(pony_ctx_t** cttx, pony_type_t* type, result_type_t result_type)
   flow->fulfiled = false;
   flow->result_type = result_type;
   pthread_mutex_init(&(flow->lock), &attr);
+  (void)type;
+
+  return flow;
 }
 
 flow_t* flow_mk_from_value(pony_ctx_t** cttx, pony_type_t* type, 
@@ -140,29 +142,45 @@ flow_t* flow_mk_from_value(pony_ctx_t** cttx, pony_type_t* type,
   flow_t* flow = encore_alloc(ctx, sizeof(flow_t));
   flow->fulfiled = true;
   flow->result = value;
-  flow->result_type = VALUE;
+  flow->result_type = FLOW_RESULT_VALUE;
   pthread_mutex_init(&(flow->lock), &attr);
+  (void)type;
+
+  return flow;
 }
 
-encore_arg_t flow_get(pony_ctx_t** ctx, pony_type_t* type, flow_t* flow)
+encore_arg_t flow_get(pony_ctx_t** ctx, flow_t* flow)
 {
-  if (flow->result_type == FLOW) {
+  if (flow->result_type == FLOW_RESULT_FLOW) {
     if (!flow->fulfiled) {
-      
+      flow_block_actor();
     }
   } else {
-
+    // TODO : how ?
   }
+
+  (void)ctx;
+  encore_arg_t result;
+  result.i = 0;
+  return result;
 }
 
 void flow_fulfil(pony_ctx_t** ctx, flow_t* flow, encore_arg_t value)
 {
-
+  (void)ctx;
+  (void)flow;
+  (void)value;
 }
 
-bool flow_fulfilled()
+bool flow_fulfilled(flow_t* flow)
 {
+  bool result;
+  
+  pthread_mutex_lock(&flow->lock);
+  result = flow->fulfiled;
+  pthread_mutex_unlock(&flow->lock);
 
+  return result;
 }
 
 void flow_trace(pony_ctx_t* ctx, void* p)
@@ -181,7 +199,17 @@ void init_mutexattr()
   init_attr = &init_mutexattr_dummy;
 }
 
+static void init_mutexattr_dummy() 
+{
+  
+}
+
 void flow_finalize(void* p)
 {
   (void)p;
+}
+
+void flow_block_actor() 
+{
+
 }

@@ -4,7 +4,7 @@
 module CodeGen.MethodDecl(translate) where
 
 import CodeGen.Typeclasses
-import CodeGen.CCodeNames
+import CodeGen.CCodeNames hiding(flowResult)
 import CodeGen.Expr()
 import CodeGen.Closure
 import CodeGen.ClassTable
@@ -36,7 +36,8 @@ instance Translatable A.MethodDecl (A.ClassDecl -> ProgramTable -> [CCode Toplev
                          callMethodWithFuture mdecl cdecl     >>>
                          callMethodWithForward mdecl cdecl    >>>
                          callMethodOneWay mdecl cdecl table   >>>
-                         callMethodStream mdecl cdecl table
+                         callMethodStream mdecl cdecl table   >>>
+                         callMethodWithFlow mdecl cdecl
     in pipelineFn []
 
 encoreRuntimeTypeParam = (Ptr (Ptr ponyTypeT), encoreRuntimeType)
@@ -167,6 +168,35 @@ callMethodWithFuture m cdecl@(A.Class {A.cname}) code
                                       runtimeType mtype]
     assignFut = Assign declFut $ futureMk mType
 
+-- callMethodWithFlow m cdecl@(A.Class {A.cname}) code = code
+
+callMethodWithFlow m cdecl@(A.Class {A.cname}) code
+  | A.isActive cdecl ||
+    A.isShared cdecl = 
+      let retType = flow
+          fName = callMethodFlowName cname mName
+          args = formalMethodArgumentsZip cname m
+          fBody = Seq $
+            (parametricMethodTypeVars m) :
+            map (assignTypeVar cname) (Ty.getTypeParameters cname) ++
+            assignFlow : 
+            Gc.ponyGcSendFlow (argPairs m) ++
+            msg ++ [retStmt]
+            -- [retStmt]
+      in code ++ [Function retType fName args fBody]
+  | otherwise = code
+  where
+    mType = A.methodType m
+    retStmt = Return flowVar
+    mName = A.methodName m
+    msg = expandMethodArgs (sendFlowMsg cname) m
+    declFlow = Decl (flow, flowVar)
+    flowMk mtype = Call flowMkFn [AsExpr encoreCtxVar,
+                                  runtimeType mtype,
+                                  AsExpr flowResultTypeValue]
+    assignFlow = Assign declFlow $ flowMk mType
+
+
 callMethodWithForward m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||
     A.isShared cdecl =
@@ -294,6 +324,14 @@ sendFutMsg cname mname args tparams =
   let
     (msgId, msgTypeName) = (uncurry futMsgId &&& uncurry futMsgTypeName) (cname, mname)
     argPairs = mkArgPairs args tparams ++ [(futNam, futNam)]
+  in
+    sendMsg cname mname msgId msgTypeName argPairs
+
+sendFlowMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
+sendFlowMsg cname mname args tparams =
+  let
+    (msgId, msgTypeName) = (uncurry flowMsgId &&& uncurry flowMsgTypeName) (cname, mname)
+    argPairs = mkArgPairs args tparams ++ [(flowNam, flowNam)]
   in
     sendMsg cname mname msgId msgTypeName argPairs
 

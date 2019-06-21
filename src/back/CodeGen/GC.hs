@@ -2,13 +2,14 @@ module CodeGen.GC (gcSend
                   ,gcRecv
                   ,ponyGcSendFuture
                   ,ponyGcSendStream
-                  ,ponyGcSendOneway) where
+                  ,ponyGcSendOneway
+                  ,ponyGcSendFlow) where
 
 import CodeGen.CCodeNames
 import CCode.Main
 import qualified AST.AST as A
 import qualified Types as Ty
-import CodeGen.Trace (traceVariable, tracefunCall, traceFuture, traceStream)
+import CodeGen.Trace (traceVariable, tracefunCall, traceFuture, traceFlow, traceStream)
 
 gcRecv params traceFun = [Embed $ "",
                           Embed $ "// --- GC on receive ----------------------------------------",
@@ -42,6 +43,10 @@ ponyGcSend argPairs futTrace =
 ponyGcSendFuture :: [(Ty.Type, CCode Lval)] -> [CCode Stat]
 ponyGcSendFuture argPairs =
   ponyGcSend argPairs (traceFuture $ futVar)
+
+ponyGcSendFlow :: [(Ty.Type, CCode Lval)] -> [CCode Stat]
+ponyGcSendFlow argPairs = 
+  ponyGcSend argPairs (traceFlow $ flowVar)
 
 ponyGcSendStream :: [(Ty.Type, CCode Lval)] -> [CCode Stat]
 ponyGcSendStream argPairs =

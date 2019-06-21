@@ -40,6 +40,7 @@ static pony_type_t *ENCORE_PRIMITIVE = (pony_type_t *)1;
 typedef struct encore_actor_t encore_actor_t;
 typedef struct encore_oneway_msg encore_oneway_msg_t;
 typedef struct encore_fut_msg encore_fut_msg_t;
+typedef struct encore_flow_msg encore_flow_msg_t;
 
 typedef struct pony_main_msg_t
 {
@@ -86,6 +87,14 @@ struct encore_fut_msg
 {
   encore_oneway_msg_t pad;
   future_t    *_fut;
+};
+
+#include "flow.h"
+
+struct encore_flow_msg 
+{
+  encore_oneway_msg_t pad;
+  flow_t      *_flow;
 };
 
 typedef struct stack_page {

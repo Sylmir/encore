@@ -540,6 +540,13 @@ desugar Async{emeta, body} =
     args = [lifted_body]
     lifted_body = Closure {emeta, eparams=[], mty=Nothing, body=body}
 
+desugar AsyncStar{emeta, body} =
+  FunctionCall {emeta, typeArguments=[], qname, args}
+  where
+    qname = QName{qnspace = Nothing, qnsource = Nothing, qnlocal = Name "spawn_star"}
+    args = [lifted_body]
+    lifted_body = Closure {emeta, eparams=[], mty=Nothing, body=body}
+    
 -- Constructor calls
 desugar New{emeta, ty} = NewWithInit{emeta, ty, args = []}
 desugar new@NewWithInit{emeta, ty, args}

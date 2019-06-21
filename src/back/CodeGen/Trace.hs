@@ -3,6 +3,7 @@ module CodeGen.Trace (
   , traceFuture
   , traceStream
   , tracefunCall
+  , traceFlow
 ) where
 
 import CCode.Main
@@ -12,6 +13,9 @@ import CCode.PrettyCCode ()
 
 traceFuture :: CCode Lval -> CCode Stat
 traceFuture var = traceObject var futureTraceFn
+
+traceFlow :: CCode Lval -> CCode Stat
+traceFlow var = traceObject var flowTraceFn
 
 traceStream :: CCode Lval -> CCode Stat
 traceStream var = traceObject var streamTraceFn

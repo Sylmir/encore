@@ -668,6 +668,26 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
                          result <- Ctx.genNamedSym (fromJust sym)
                          return (Var result, Assign (Decl (translate retTy, Var result)))
 
+  -- Just handle Flows for now
+  translate call@A.MessageSendFlow{A.emeta, A.target, A.name, A.args, A.typeArguments}
+    | isActive = do
+        (ntarget, ttarget) <- translate target
+        (initArgs, resultExpr) <- 
+          callTheMethodFlow ntarget targetTy name args typeArguments retTy
+        (resultVar, handleResult) <- returnValue
+        return (resultVar,
+                Seq $ ttarget : targetNullCheck (AsExpr ntarget) target name emeta " !! ":
+                      initArgs ++ [handleResult resultExpr])
+    | otherwise = error $ "Expr.hs: can't translate MessageSendFlow when " ++ 
+                          "source of the call is not an active object"
+    where
+      targetTy = A.getType target
+      isActive = Ty.isActiveSingleType targetTy
+      retTy = A.getType call
+      returnValue = do 
+        result <- Ctx.genNamedSym "flow" 
+        return (Var result, Assign (Decl (translate retTy, Var result)))
+
   translate w@(A.DoWhile {A.cond, A.body}) = do
     (ncond,tcond) <- translate cond
     (_,tbody) <- translate body
@@ -1038,6 +1058,15 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
            return (Var tmp, Seq [tval, Assign (Decl (resultType, Var tmp)) theGet])
     | otherwise = error $ "Cannot translate get of " ++ show val
 
+  translate getStar@(A.GetStar{A.val})
+    | Ty.isFlowType $ A.getType val =
+        do (nval, tval) <- translate val
+           let resultType = translate (Ty.getResultType $ A.getType val)
+               theGet = fromEncoreArgT resultType (Call flowGetFn [encoreCtxVar, nval])
+           tmp <- Ctx.genSym
+           return (Var tmp, Seq [tval, Assign (Decl (resultType, Var tmp)) theGet])
+    | otherwise = error $ "Cannot translate get* of " ++ show val
+
   translate A.Forward{A.forwardExpr = expr@A.MessageSend{A.emeta
                                                        ,A.target
                                                        ,A.name
@@ -1388,6 +1417,8 @@ callTheMethodForward extras =
 callTheMethodOneway = callTheMethodForName methodImplOneWayName
 
 callTheMethodStream = callTheMethodForName methodImplStreamName
+
+callTheMethodFlow = callTheMethodForName callMethodFlowName
 
 callTheMethodSync targetName targetType methodName args typeargs resultType = do
   (initArgs, expr) <- callTheMethodForName methodImplName

@@ -74,6 +74,9 @@ ponyMainMsgT = Typ ponyMainMsgName
 encMsgT :: CCode Ty
 encMsgT = Typ "encore_fut_msg_t"
 
+encFlowMsgT :: CCode Ty
+encFlowMsgT = Typ "encore_flow_msg_t"
+
 encOnewayMsgT :: CCode Ty
 encOnewayMsgT = Typ "encore_oneway_msg_t"
 
@@ -212,6 +215,10 @@ callMethodFutureName :: Ty.Type -> ID.Name -> CCode Name
 callMethodFutureName clazz mname =
   Nam $ callMethodFutureNameStr clazz mname
 
+callMethodFlowName :: Ty.Type -> ID.Name -> CCode Name
+callMethodFlowName clazz mname =
+  Nam $ callMethodFlowNameStr clazz mname
+
 methodImplForwardName :: Ty.Type -> ID.Name -> CCode Name
 methodImplForwardName clazz mname =
   Nam $ methodImplForwardNameStr clazz mname
@@ -239,6 +246,10 @@ forwardingClosureImplNameStr mname = show mname ++ "_async"
 callMethodFutureNameStr :: Ty.Type -> ID.Name -> String
 callMethodFutureNameStr clazz mname =
   methodImplNameStr clazz mname ++ "_future"
+
+callMethodFlowNameStr :: Ty.Type -> ID.Name -> String
+callMethodFlowNameStr clazz mname =
+  methodImplNameStr clazz mname ++ "_flow"
 
 methodImplForwardNameStr :: Ty.Type -> ID.Name -> String
 methodImplForwardNameStr clazz mname =
@@ -406,6 +417,10 @@ futMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
 futMsgTypeName cls mname =
     Nam $ encoreName "fut_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
 
+flowMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
+flowMsgTypeName cls mname =
+    Nam $ encoreName "flow_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
+
 oneWayMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
 oneWayMsgTypeName cls mname =
     Nam $ encoreName "oneway_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
@@ -417,6 +432,10 @@ msgId ref mname =
 futMsgId :: Ty.Type -> ID.Name -> CCode Name
 futMsgId ref mname =
     Nam $ encoreName "FUT_MSG" (qualifyRefType ref ++ "_" ++ show mname)
+
+flowMsgId :: Ty.Type -> ID.Name -> CCode Name
+flowMsgId ref mname =
+    Nam $ encoreName "FLOW_MSG" (qualifyRefType ref ++ "_" ++ show mname)
 
 oneWayMsgId :: Ty.Type -> ID.Name -> CCode Name
 oneWayMsgId cls mname =
@@ -473,8 +492,31 @@ futureChainActor = Nam "future_chain_actor"
 futureChainWithFut :: CCode Name
 futureChainWithFut = Nam "future_chain_with_fut"
 
+flowMkFn :: CCode Name
+flowMkFn = Nam "flow_mk"
+
+flowMkFromValueFn :: CCode Name
+flowMkFromValueFn = Nam "flow_mk_from_value"
+
+flowFulfilFn :: CCode Name
+flowFulfilFn = Nam "flow_fulfil"
+
+flowResult :: String
+flowResult = "FLOW_RESULT"
+
+-- A Flow containing another Flow
+flowResultTypeFlow :: CCode Lval
+flowResultTypeFlow = Var $ flowResult ++ "_FLOW"
+
+-- A Flow containing something else than a Flow
+flowResultTypeValue :: CCode Lval
+flowResultTypeValue = Var $ flowResult ++ "_VALUE"
+
 flowTraceFn :: CCode Name
 flowTraceFn = Nam "flow_trace"
+
+flowGetFn :: CCode Name
+flowGetFn = Nam "flow_get"
 
 actorSuspend :: CCode Name
 actorSuspend = Nam "actor_suspend"
@@ -538,6 +580,9 @@ streamTraceFn = Nam "stream_trace"
 
 futureTypeRecName :: CCode Name
 futureTypeRecName = Nam $ "future_type"
+
+flowTypeRecName :: CCode Name
+flowTypeRecName = Nam $ "flow_type"
 
 closureTypeRecName :: CCode Name
 closureTypeRecName = Nam $ "closure_type"

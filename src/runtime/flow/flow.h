@@ -8,9 +8,20 @@ typedef enum result_type_e result_type_t;
 extern pony_type_t flow_type;
 
 /**
+ * Possible types for the next Flow in a chain.
+ */
+typedef enum flow_result_type_e {
+  /// Next Flow is a Flow
+  FLOW_RESULT_FLOW,
+  /// Next Flow is a usable value
+  FLOW_RESULT_VALUE
+} flow_result_type_t;
+
+/**
  * Create a new flow with result type @a result_type.
  */
-flow_t* flow_mk(pony_ctx_t** ctx, pony_type_t* type, result_type_t result_type);
+flow_t* flow_mk(pony_ctx_t** ctx, pony_type_t* type, 
+                flow_result_type_t result_type);
 
 /**
  * Create a new flow, fulfiled with value @a value.
@@ -25,7 +36,7 @@ flow_t* flow_mk(pony_ctx_t** ctx, pony_type_t* type, result_type_t result_type);
 flow_t* flow_mk_from_value(pony_ctx_t** cttx, pony_type_t* type, 
                            encore_arg_t value);
 
-encore_arg_t flow_get(pony_ctx_t** cttx, pony_type_t* type, flow_t* flow);
+encore_arg_t flow_get(pony_ctx_t** cttx, flow_t* flow);
 void flow_fulfil(pony_ctx_t** cttx, flow_t* flow, encore_arg_t value);
 bool flow_fulfilled();
 
