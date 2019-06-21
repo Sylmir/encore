@@ -168,8 +168,6 @@ callMethodWithFuture m cdecl@(A.Class {A.cname}) code
                                       runtimeType mtype]
     assignFut = Assign declFut $ futureMk mType
 
--- callMethodWithFlow m cdecl@(A.Class {A.cname}) code = code
-
 callMethodWithFlow m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||
     A.isShared cdecl = 
@@ -182,7 +180,6 @@ callMethodWithFlow m cdecl@(A.Class {A.cname}) code
             assignFlow : 
             Gc.ponyGcSendFlow (argPairs m) ++
             msg ++ [retStmt]
-            -- [retStmt]
       in code ++ [Function retType fName args fBody]
   | otherwise = code
   where
