@@ -1,11 +1,23 @@
+#include <assert.h>
+#include <pony.h>
+#include <pthread.h>
+
+#include "async.h"
 #include "encore.h"
 #include "flow.h"
+#include "../libponyrt/actor/messageq.h"
+#include "../libponyrt/sched/scheduler.h"
 
-/// Attributes for the mutex in flow_t.
+#define FLOW_MAX_CAPABILITIES 16
+
+/// Attributes for the mutex in flow_t. We use a recursive mutex so the same
+/// thread can lock several times in a row.
 static pthread_mutexattr_t attr;
 
 struct flow_s 
 {
+  pony_type_t* type;
+
   /// Type of the next Flow in the chain
   flow_result_type_t result_type;
   /**
@@ -18,8 +30,8 @@ struct flow_s
   encore_arg_t result;
 
   bool fulfiled;
-  // actor_entry_t blocked_actors[16];
-  // int n_blocked_actors;
+  actor_entry_t blocked_actors[FLOW_MAX_CAPABILITIES];
+  int n_blocked_actors;
 
   /// Lock based synchronisation for now
   pthread_mutex_t lock;
@@ -104,31 +116,58 @@ static void init_mutexattr();
 /// Dummy function
 static void init_mutexattr_dummy();
 
-static void flow_finalize(void*);
+static void flow_finalize(flow_t* flow);
 
-static void flow_block_actor();
+static void flow_block_actor(pony_ctx_t** ctx, flow_t* flow);
 
 /// Pointer to the function used to initialize the global pthread_mutexattr_t
-/// object. This prevents the object from being initialized multiple times.
+/// object. This prevents the attribute from being initialized multiple times.
 static void (*init_attr)() = &init_mutexattr;
+
+/// Garbage collection
+
+/// Acquire the value of a flow in the garbage collector.
+static void acquire_flow_value();
+
+/* extern */ void encore_async_gc_acquireobject(pony_ctx_t* ctx, void*p, 
+    pony_type_t* type, int mutability);
+
+/* extern */ void encore_async_gc_acquireactor(pony_ctx_t* ctx, pony_actor_t* actor);
+
+static void encore_gc_acquire(pony_ctx_t* ctx);
+
+static inline void flow_gc_trace_value(pony_ctx_t* ctx, flow_t* flow)
+{
+  assert(flow);
+
+  if (flow->type == ENCORE_ACTIVE) {
+    encore_trace_actor(ctx, flow->result.p);
+  } else if (flow->type != ENCORE_PRIMITIVE) {
+    encore_trace_object(ctx, flow->result.p, flow->type->trace);
+  }
+}
+
+static void flow_gc_send_value(pony_ctx_t* ctx, flow_t* flow);
+
+static void flow_gc_recv_value(pony_ctx_t* ctx, flow_t* flow);
 
 pony_type_t flow_type = {
   .id = ID_FLOW,
   .size = sizeof(flow_t),
   .trace = flow_trace,
-  .final = flow_finalize
+  .final = (void*)&flow_finalize
 };
 
 flow_t* flow_mk(pony_ctx_t** cttx, pony_type_t* type, flow_result_type_t result_type)
 {
-  init_attr();
-
   pony_ctx_t* ctx = *cttx;
-  flow_t* flow = encore_alloc(ctx, sizeof(flow_t));
+  flow_t* flow = pony_alloc_final(ctx, sizeof(flow_t));
   flow->fulfiled = false;
   flow->result_type = result_type;
+  flow->type = type;
+
+  init_attr();
   pthread_mutex_init(&(flow->lock), &attr);
-  (void)type;
 
   return flow;
 }
@@ -136,43 +175,75 @@ flow_t* flow_mk(pony_ctx_t** cttx, pony_type_t* type, flow_result_type_t result_
 flow_t* flow_mk_from_value(pony_ctx_t** cttx, pony_type_t* type, 
                            encore_arg_t value)
 {
-  init_attr();
-
   pony_ctx_t* ctx = *cttx;
-  flow_t* flow = encore_alloc(ctx, sizeof(flow_t));
+  flow_t* flow = pony_alloc_final(ctx, sizeof(flow_t));
   flow->fulfiled = true;
   flow->result = value;
   flow->result_type = FLOW_RESULT_VALUE;
+  flow->type = type;
+
+  init_attr();
   pthread_mutex_init(&(flow->lock), &attr);
-  (void)type;
 
   return flow;
 }
 
 encore_arg_t flow_get(pony_ctx_t** ctx, flow_t* flow)
 {
-  if (flow->result_type == FLOW_RESULT_FLOW) {
-    if (!flow->fulfiled) {
-      flow_block_actor();
-    }
-  } else {
-    // TODO : how ?
+  if (!flow->fulfiled) {
+      flow_block_actor(ctx, flow);
   }
 
-  (void)ctx;
-  encore_arg_t result;
-  result.i = 0;
-  return result;
+  assert(flow->fulfiled);
+  acquire_flow_value(ctx, flow);
+
+  if (flow->result_type == FLOW_RESULT_FLOW) {
+    // Perform a new get. Infinite recursion incoming
+    return flow_get(ctx, (flow_t*)flow->result.p);
+  } else {
+    return flow->result;
+  }
+
+  // return flow->result;
 }
 
-void flow_fulfil(pony_ctx_t** ctx, flow_t* flow, encore_arg_t value)
+void flow_fulfil(pony_ctx_t** ctx, flow_t* flow, encore_arg_t result)
 {
-  (void)ctx;
-  (void)flow;
-  (void)value;
+  assert(!flow->fulfiled);
+
+  pthread_mutex_lock(&flow->lock);
+
+  flow->result = result;
+  flow->fulfiled = true;
+
+  pony_ctx_t* cctx = *ctx;
+  flow_gc_send_value(cctx, flow);
+
+  for (int i = 0; i < flow->n_blocked_actors; ++i) {
+    actor_entry_t* actor = flow->blocked_actors + i;
+    switch (actor->type) {
+      case BLOCKED_MESSAGE:
+        actor_set_resume((encore_actor_t*)actor->message.actor);
+        pony_schedule(cctx, actor->message.actor);
+        break;
+
+      case DETACHED_CLOSURE:
+        assert(false);
+        exit(-1);
+
+      default:
+        break;
+    }
+  }
+
+  // Execute chaining
+
+  // Unlock awaiting actors
+
+  pthread_mutex_unlock(&flow->lock);
 }
 
-bool flow_fulfilled(flow_t* flow)
+bool flow_fulfilled(flow_t* const flow)
 {
   bool result;
   
@@ -199,17 +270,71 @@ void init_mutexattr()
   init_attr = &init_mutexattr_dummy;
 }
 
-static void init_mutexattr_dummy() 
+void init_mutexattr_dummy() 
 {
   
 }
 
-void flow_finalize(void* p)
+void flow_finalize(flow_t* flow)
 {
-  (void)p;
+  pony_ctx_t* cctx = pony_ctx();
+  flow_gc_recv_value(cctx, flow);
 }
 
-void flow_block_actor() 
+void flow_block_actor(pony_ctx_t** ctx, flow_t* flow) 
 {
+  pony_ctx_t* cctx = *ctx;
+  pony_actor_t* actor = cctx->current;
 
+  pthread_mutex_lock(&flow->lock);
+
+  if (flow->fulfiled) {
+    pthread_mutex_unlock(&flow->lock);
+    return;
+  }
+
+  pony_unschedule(cctx, actor);
+  assert(flow->n_blocked_actors <= FLOW_MAX_CAPABILITIES);
+  flow->blocked_actors[flow->n_blocked_actors++] = (actor_entry_t) {
+    .type = BLOCKED_MESSAGE,
+    .message = (message_entry_t) {
+      .actor = actor
+    }
+  };
+
+  encore_actor_t* as_encore_actor = (encore_actor_t*)actor;
+  assert(as_encore_actor->lock == NULL);
+  as_encore_actor->lock = &flow->lock;
+  actor_block(ctx, as_encore_actor);
+
+  pthread_mutex_unlock(&flow->lock);
+}
+
+void acquire_flow_value(pony_ctx_t** ctx, flow_t* flow)
+{
+  pony_ctx_t* cctx = *ctx;
+  encore_gc_acquire(cctx);
+  flow_gc_trace_value(cctx, flow);
+  pony_acquire_done(cctx);
+}
+
+void encore_gc_acquire(pony_ctx_t* ctx)
+{
+  assert(ctx->stack == NULL);
+  ctx->trace_object = encore_async_gc_acquireobject;
+  ctx->trace_actor = encore_async_gc_acquireactor;
+}
+
+void flow_gc_send_value(pony_ctx_t* ctx, flow_t* flow)
+{
+  pony_gc_send(ctx);
+  flow_gc_trace_value(ctx, flow);
+  pony_send_done(ctx);
+}
+
+void flow_gc_recv_value(pony_ctx_t* ctx, flow_t* flow)
+{
+  pony_gc_recv(ctx);
+  flow_gc_trace_value(ctx, flow);
+  ponyint_gc_handlestack(ctx);
 }

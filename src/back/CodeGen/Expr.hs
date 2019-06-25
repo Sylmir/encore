@@ -1216,6 +1216,14 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
                     _ -> error "Expr.hs: No context to return from"
          return (unit, Seq $ tval:theReturn)
 
+  translate lift@(A.LiftToFlow {A.val}) =
+      do (nval, tval) <- translate val
+         tmp <- Ctx.genSym
+         let eType = A.getType val
+             theCall = Assign (Decl (flow, Var tmp)) (Call flowMkFromValueFn [AsExpr encoreCtxVar, runtimeType eType, 
+                                                                              asEncoreArgT (translate eType) nval])
+         return (Var tmp, Seq [tval, theCall])
+
   translate iseos@(A.IsEos{A.target}) =
       do (ntarg, ttarg) <- translate target
          tmp <- Ctx.genSym

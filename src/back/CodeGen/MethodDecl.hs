@@ -190,9 +190,11 @@ callMethodWithFlow m cdecl@(A.Class {A.cname}) code
     declFlow = Decl (flow, flowVar)
     flowMk mtype = Call flowMkFn [AsExpr encoreCtxVar,
                                   runtimeType mtype,
-                                  AsExpr flowResultTypeValue]
+                                  if Ty.isFlowType mType then 
+                                    AsExpr flowResultTypeFlow
+                                  else
+                                    AsExpr flowResultTypeValue]
     assignFlow = Assign declFlow $ flowMk mType
-
 
 callMethodWithForward m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||

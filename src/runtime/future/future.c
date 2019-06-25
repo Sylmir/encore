@@ -10,6 +10,7 @@
 #include <pony.h>
 #include <dtrace_encore.h>
 
+#include "async.h"
 #include "encore.h"
 #include "future.h"
 #include "../libponyrt/actor/messageq.h"
@@ -20,67 +21,15 @@ pthread_mutexattr_t attr;
 #define UNBLOCK  pthread_mutex_unlock(&fut->lock);
 #define perr(m)  // fprintf(stderr, "%s\n", m);
 
-extern void encore_future_gc_acquireactor(pony_ctx_t* ctx, pony_actor_t* actor);
-extern void encore_future_gc_acquireobject(pony_ctx_t* ctx, void* p,
+extern void encore_async_gc_acquireactor(pony_ctx_t* ctx, pony_actor_t* actor);
+extern void encore_async_gc_acquireobject(pony_ctx_t* ctx, void* p,
     pony_type_t *t, int mutability);
 static void encore_gc_acquire(pony_ctx_t* ctx)
 {
   assert(ctx->stack == NULL);
-  ctx->trace_object = encore_future_gc_acquireobject;
-  ctx->trace_actor = encore_future_gc_acquireactor;
+  ctx->trace_object = encore_async_gc_acquireobject;
+  ctx->trace_actor = encore_async_gc_acquireactor;
 }
-
-typedef struct actor_entry actor_entry_t;
-typedef struct closure_entry closure_entry_t;
-typedef struct message_entry message_entry_t;
-
-// Terminology:
-// Producer -- the actor responsible for fulfilling a future
-// Consumer -- an non-producer actor using a future
-
-typedef enum responsibility_t
-{
-  // A closure that should be run by the producer
-  DETACHED_CLOSURE,
-  // A message blocked on this future
-  BLOCKED_MESSAGE
-} responsibility_t;
-
-struct closure_entry
-{
-  // The consumer that created closure
-  pony_actor_t *actor;
-  // The future where the result of the closure should be stored
-  future_t     *future;
-  // The closure to be run on fulfilment of the future
-  closure_t    *closure;
-
-  closure_entry_t *next;
-
-};
-
-struct message_entry
-{
-  // The consumer that created closure
-  pony_actor_t *actor;
-  // FIXME: add context
-};
-
-struct actor_entry
-{
-  responsibility_t type;
-  union
-  {
-    closure_entry_t closure;
-    message_entry_t message;
-  };
-};
-
-typedef struct actor_list {
-  encore_actor_t *actor;
-  ucontext_t *uctx;
-  struct actor_list *next;
-} actor_list;
 
 struct future
 {
@@ -122,7 +71,7 @@ static void trace_closure_entry(pony_ctx_t *ctx, void *p)
   pony_trace(ctx, p);
   closure_entry_t *c = (closure_entry_t*)p;
   encore_trace_actor(ctx, c->actor);
-  encore_trace_object(ctx, c->future, &future_trace);
+  encore_trace_object(ctx, c->storage.future, &future_trace);
   encore_trace_object(ctx, c->closure, &closure_trace);
 }
 
@@ -246,13 +195,13 @@ void future_fulfil(pony_ctx_t **ctx, future_t *fut, encore_arg_t value)
     closure_entry_t *current = fut->children;
     while(current) {
       encore_arg_t result = run_closure(ctx, current->closure, value);
-      if (current->future) {
+      if (current->storage.future) {
         // This case happens when futures can be chained on.
         // As an optimisation to the ParT library, we do know
         // that certain functions in the ParT do not need to fulfil
         // a future, e.g. the ParT optimised version is called
         // `future_register_callback` and sets `current->future = NULL`
-        future_fulfil(ctx, current->future, result);
+        future_fulfil(ctx, current->storage.future, result);
       }
 
       cctx = *ctx; // ctx might have been changed
@@ -348,7 +297,7 @@ static void future_chain(pony_ctx_t **ctx, future_t *fut, pony_type_t *type,
   pony_ctx_t* cctx = *ctx;
   closure_entry_t *entry = encore_alloc(cctx, sizeof *entry);
   entry->actor = (cctx)->current;
-  entry->future = r;
+  entry->storage.future = r;
   entry->closure = c;
   entry->next = fut->children;
   fut->children = entry;
@@ -386,7 +335,7 @@ void future_register_callback(pony_ctx_t **ctx,
   pony_ctx_t* cctx = *ctx;
   closure_entry_t *entry = encore_alloc(cctx, sizeof *entry);
   entry->actor = (cctx)->current;
-  entry->future = NULL;
+  entry->storage.future = NULL;
   entry->closure = c;
   entry->next = fut->children;
   fut->children = entry;

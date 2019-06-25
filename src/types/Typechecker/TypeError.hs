@@ -528,7 +528,13 @@ instance Show Error where
         printf "Cannot have '%s' outside of a streaming method"
                (show $ ppSugared e)
     show (UnboundFunctionError name) =
-        printf "Unbound function variable '%s'" (show name)
+        let qualifiedName = show $ qnlocal name
+        in printf "Unbound function variable '%s'%s" (show name) $ 
+             if (qualifiedName == "spawn" || qualifiedName == "spawn_star") then
+              "\nIf you used async or async*, did you forget to import Task ?"
+             else
+               ""
+
     show (NonFunctionTypeError ty) =
         printf "Cannot use value of type '%s' as a function" (show ty)
     show BottomTypeInferenceError = "Not enough information to infer the type.\n" ++

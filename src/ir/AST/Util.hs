@@ -112,6 +112,7 @@ getChildren IsEos {target} = [target]
 getChildren StreamNext {target} = [target]
 getChildren Await {val} = [val]
 getChildren Return {val} = [val]
+getChildren LiftToFlow {val} = [val]
 getChildren Suspend {} = []
 getChildren FutureChain {future, chain} = [future, chain]
 getChildren FutureChainStar {future, chain} = [future, chain]
@@ -198,6 +199,7 @@ putChildren [target] e@(IsEos {}) = e{target = target}
 putChildren [target] e@(StreamNext {}) = e{target = target}
 putChildren [val] e@(Await {}) = e{val = val}
 putChildren [val] e@(Return {}) = e{val = val}
+putChildren [val] e@(LiftToFlow {}) = e{val = val}
 putChildren [] e@(Suspend {}) = e
 putChildren [future, chain] e@(FutureChain {}) = e{future = future, chain = chain}
 putChildren [future, chain] e@(FutureChainStar {}) = e{future = future, chain = chain}
@@ -269,6 +271,7 @@ putChildren _ e@(IsEos {}) = error "'putChildren l IsEos' expects l to have 1 el
 putChildren _ e@(StreamNext {}) = error "'putChildren l StreamNext' expects l to have 1 element"
 putChildren _ e@(Await {}) = error "'putChildren l Await' expects l to have 1 element"
 putChildren _ e@(Return {}) = error "'putChildren l Return' expects l to have 1 element"
+putChildren _ e@(LiftToFlow {}) = error "'putChildren l LiftToFlow' expects l to have 1 element"
 putChildren _ e@(Suspend {}) = error "'putChildren l Suspend' expects l to have 0 elements"
 putChildren _ e@(FutureChain {}) = error "'putChildren l FutureChain' expects l to have 2 elements"
 putChildren _ e@(FutureChainStar {}) = error "'putChildren l FutureChainStar' expects l to have 2 elements"
@@ -479,6 +482,8 @@ mark asParent s@Seq{eseq} =
 mark asParent s@IfThenElse{cond, thn, els} =
   asParent s{cond=markAsExpr cond, thn=mark asParent thn, els=mark asParent els}
 mark asParent s@Async{body} = asParent s{body=mark asParent body}
+-- TODO : async* inlined (let res = async* BLOCK end)
+-- mark asParent s@AsyncStar{body} = asParent s{body=mark asParent body}
 mark asParent s@Assign {lhs, rhs} = asStat s{lhs=markAsExpr lhs, rhs=markAsExpr rhs}
 mark asParent s@Print {args} = asStat s{args=map markAsExpr args}
 mark asParent s@MaybeValue{mdt=d@JustData{e}} = asParent s{mdt=d{e=mark markAsExpr e}}

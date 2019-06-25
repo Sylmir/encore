@@ -36,9 +36,10 @@ flow_t* flow_mk(pony_ctx_t** ctx, pony_type_t* type,
 flow_t* flow_mk_from_value(pony_ctx_t** cttx, pony_type_t* type, 
                            encore_arg_t value);
 
+pony_type_t* flow_get_type(flow_t* flow);
 encore_arg_t flow_get(pony_ctx_t** cttx, flow_t* flow);
 void flow_fulfil(pony_ctx_t** cttx, flow_t* flow, encore_arg_t value);
-bool flow_fulfilled();
+bool flow_fulfilled(flow_t* const flow);
 
 void flow_trace(pony_ctx_t* ctx, void* p);
 

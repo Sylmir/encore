@@ -561,7 +561,7 @@ void ponyint_gc_markactor(pony_ctx_t* ctx, pony_actor_t* actor)
   mark_remote_actor(ctx, gc, aref);
 }
 
-void encore_future_gc_acquireactor(pony_ctx_t* ctx, pony_actor_t* actor)
+void encore_async_gc_acquireactor(pony_ctx_t* ctx, pony_actor_t* actor)
 {
   gc_t* gc = ponyint_actor_gc(ctx->current);
 
@@ -579,7 +579,7 @@ void encore_future_gc_acquireactor(pony_ctx_t* ctx, pony_actor_t* actor)
   }
 }
 
-void encore_future_gc_acquireobject(pony_ctx_t* ctx, void* p, pony_type_t *t,
+void encore_async_gc_acquireobject(pony_ctx_t* ctx, void* p, pony_type_t *t,
     int mutability)
 {
   chunk_t* chunk = (chunk_t*)ponyint_pagemap_get(p);

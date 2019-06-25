@@ -658,6 +658,12 @@ data Expr = Skip {emeta :: Meta Expr}
                        body :: Expr}
           | Return {emeta :: Meta Expr,
                     val :: Expr}
+          -- Internal : if a function has a return type of Flow[X] and one of 
+          -- its control paths returns a value Y compatible with X, we need to 
+          -- turn that value into a Flow. In that case, we mark the value of
+          -- the Return as a LiftToFlow, so we know, during code generation, 
+          -- that we need to lift the value into a Flow.
+          | LiftToFlow { emeta :: Meta Expr, val :: Expr }
           | MaybeValue {emeta :: Meta Expr,
                         mdt :: MaybeContainer }
           | Tuple {emeta :: Meta Expr,

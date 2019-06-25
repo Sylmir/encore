@@ -93,7 +93,8 @@ solution "ponyrt"
     "libponyrt",
     "../common",
     "../dtrace",
-    "../flow"
+    "../flow",
+    "../async_common"
   }
 
   flags {

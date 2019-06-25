@@ -120,7 +120,6 @@ addLocalFunctions = extendEnvironment . map localFunctionType
         in
           (functionName f, arrowType)
 
-
 instance Checkable Function where
     --  E, x1 : t1, .., xn : tn, xa: a, xb: b |- funbody : funtype
     -- ----------------------------------------------------------
@@ -148,7 +147,13 @@ instance Checkable Function where
       eLocals <- local (addTypeParameters funtypeparams .
                         addLocalFunctions funlocals) $
                        mapM typecheck funlocals
-      return f{funbody = eBody
+      
+      let liftBody = if isFlowType funtype && (not . isFlowType . AST.getType) eBody then
+                       LiftToFlow{ emeta = getMeta eBody, val = eBody}
+                     else
+                       eBody
+
+      return f{funbody = liftBody
               ,funlocals = eLocals}
 
 instance Checkable TraitDecl where
@@ -221,12 +226,12 @@ matchArgumentLength targetType header args =
 meetRequiredFields :: [FieldDecl] -> Type -> TypecheckM ()
 meetRequiredFields cFields trait = do
   tdecl <- findTrait trait
-  trace ("meetRequiredFields (" ++ (show trait) ++ ") : ") $ mapM_ traceField (requiredFields tdecl)
+  -- trace ("meetRequiredFields (" ++ (show trait) ++ ") : ") $ mapM_ traceField (requiredFields tdecl)
   mapM_ matchField (requiredFields tdecl)
     where
     matchField tField = do
       expField <- findField trait (fname tField)
-      traceField expField
+      -- traceField expField
       let expected = ftype expField
           result = find (==expField) cFields
           cField = fromJust result
@@ -550,7 +555,11 @@ instance Checkable MethodDecl where
                           dropLocal thisName) $
                          mapM typecheck mlocals
 
-        return $ m{mbody = eBody
+        let eBody' = if isFlowType mType && (not . isFlowType . AST.getType) eBody then
+                       LiftToFlow { emeta = getMeta eBody, val = eBody }
+                     else
+                       eBody
+        return $ m{mbody = eBody'
                   ,mlocals = eLocals}
       where
         checkPurity e = mapM_ checkImpureExpr (Util.filter isImpure e)
@@ -585,7 +594,7 @@ hasType e ty = local (pushBT e) $ checkHasType e ty
              let exprType = AST.getType eExpr
              resultType <- exprType `coercedInto` ty
              assertSubtypeOf resultType ty
-             let result = propagateResultType resultType eExpr
+             let result     = propagateResultType resultType eExpr
              return $ setType resultType result
 
 instance Checkable Expr where
@@ -1412,7 +1421,7 @@ instance Checkable Expr where
     --  E |- currentMethod : _ -> t
     -- -----------------------------
     --  E |- return expr : _|_
-    doTypecheck ret@(Return {val}) =
+    doTypecheck ret@(Return {emeta, val}) =
         do eVal <- typecheck val
            context <- asks currentExecutionContext
            ty <- case context of
@@ -1425,7 +1434,12 @@ instance Checkable Expr where
            unlessM (eType `subtypeOf` ty) $
              pushError ret $ ExpectingOtherTypeError
                 (show ty ++ " (type of the enclosing method or function)") eType
-           return $ setType bottomType ret {val = eVal}
+           let eVal' = if isFlowType ty && (not $ isFlowType eType) then
+                         trace "Lifting to flow" $ LiftToFlow { emeta = emeta, val = eVal}
+                       else
+                         eVal
+                     
+           return $ setType bottomType ret {val = eVal'}
 
     --  isStreaming(currentMethod)
     -- ----------------------------
@@ -1544,7 +1558,11 @@ instance Checkable Expr where
                   then tcError $ ImmutableVariableError qname
                   else pushError eLhs NonAssignableLHSError
            eRhs <- hasType rhs (AST.getType eLhs)
-           return $ setType unitType assign {lhs = eLhs, rhs = eRhs}
+           let eRhs' = if isFlowType (AST.getType eLhs) && (not . isFlowType . AST.getType) eRhs then
+                         LiftToFlow { emeta = getMeta eRhs, val = eRhs }
+                       else
+                         eRhs
+           return $ setType unitType assign {lhs = eLhs, rhs = eRhs'}
 
     doTypecheck assign@(Assign {lhs, rhs}) =
         do eLhs <- typecheck lhs
@@ -1557,7 +1575,11 @@ instance Checkable Expr where
                  assertNotValField eLhs
              _ -> assertNotValField eLhs
            eRhs <- hasType rhs (AST.getType eLhs)
-           return $ setType unitType assign {lhs = eLhs, rhs = eRhs}
+           let eRhs' = if isFlowType (AST.getType eLhs) && (not . isFlowType . AST.getType) eRhs then
+                         LiftToFlow { emeta = getMeta eRhs, val = eRhs }
+                       else
+                         eRhs
+           return $ setType unitType assign {lhs = eLhs, rhs = eRhs'}
         where
           assertNotValField f
               | FieldAccess {target, name} <- f = do
@@ -2044,7 +2066,8 @@ instance Checkable Expr where
 
 canBeNull ty =
   isRefType ty || isFutureType ty || isArrayType ty ||
-  isStreamType ty || isCapabilityType ty || isArrowType ty || isParType ty
+  isStreamType ty || isCapabilityType ty || isArrowType ty || isParType ty || 
+  isFlowType ty
 
 checkEncapsulation :: Expr -> Name -> Type -> [Expr] -> TypecheckM ()
 checkEncapsulation target name returnType args = do
@@ -2135,6 +2158,9 @@ coerceNull null ty
 
 coercedInto :: Type -> Type -> TypecheckM Type
 coercedInto actual expected
+  | isFlowType actual && isFlowType expected = do
+      resultType <- stripFlow actual `coercedInto` stripFlow expected
+      return $ setResultType actual resultType
   | hasResultType expected && hasResultType actual = do
       resultType <- getResultType actual `coercedInto` getResultType expected
       return $ setResultType actual resultType
@@ -2182,12 +2208,16 @@ matchArguments (arg:args) (typ:types) = do
   needCast <- fmap (&& typ /= actualTyp) $
                    actualTyp `subtypeOf` typ
   let
-    casted = TypedExpr{emeta=getMeta eArg, body=eArg, ty=typ}
-    eArg' = if needCast then casted else eArg
-  return (eArg':eArgs, bindings')
+    -- casted = TypedExpr{emeta=getMeta eArg, body=eArg, ty=typ}
+    -- eArg' = if needCast then casted else eArg
+    eArg' = if isFlowType typ && (not . isFlowType) actualTyp then
+              LiftToFlow {emeta = getMeta eArg, val = eArg}
+            else
+              eArg
+  -- return (eArg':eArgs, bindings')
   (eArgs, bindings') <- local (bindTypes bindings) $
                               matchArguments args types
-  return (eArg:eArgs, bindings')
+  return (eArg':eArgs, bindings')
 
 --  Note that the bindings B is implicit in the reader monad
 --
