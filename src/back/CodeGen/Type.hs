@@ -54,6 +54,7 @@ runtimeType ty
     | Ty.isArrayType ty  = Amp arrayTypeRecName
     | Ty.isRangeType ty  = Amp rangeTypeRecName
     | Ty.isParType ty    = Amp partyTypeRecName
+    | Ty.isFlowType ty   = Amp flowTypeRecName
     | Ty.isPrimitive ty  = AsExpr encorePrimitive
     | Ty.isMaybeType ty  = Amp optionTypeRecName
     | Ty.isTupleType ty  = Amp tupleTypeRecName
