@@ -294,7 +294,7 @@ void flow_block_actor(pony_ctx_t** ctx, flow_t* flow)
   }
 
   pony_unschedule(cctx, actor);
-  assert(flow->n_blocked_actors <= FLOW_MAX_CAPABILITIES);
+  assert(flow->n_blocked_actors < FLOW_MAX_CAPABILITIES);
   flow->blocked_actors[flow->n_blocked_actors++] = (actor_entry_t) {
     .type = BLOCKED_MESSAGE,
     .message = (message_entry_t) {
