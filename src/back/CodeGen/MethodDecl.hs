@@ -26,6 +26,7 @@ import qualified Types as Ty
 
 import Control.Monad.State hiding(void)
 import Control.Arrow ((&&&), (>>>), arr)
+import Debug.Trace (trace)
 
 instance Translatable A.MethodDecl (A.ClassDecl -> ProgramTable -> [CCode Toplevel]) where
   -- | Translates a method into the corresponding C-function
@@ -171,16 +172,10 @@ callMethodWithFuture m cdecl@(A.Class {A.cname}) code
 callMethodWithFlow m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||
     A.isShared cdecl = 
-      let retType = flow
-          fName = callMethodFlowName cname mName
-          args = formalMethodArgumentsZip cname m
-          fBody = Seq $
-            (parametricMethodTypeVars m) :
-            map (assignTypeVar cname) (Ty.getTypeParameters cname) ++
-            assignFlow : 
-            Gc.ponyGcSendFlow (argPairs m) ++
-            msg ++ [retStmt]
-      in code ++ [Function retType fName args fBody]
+      if qualifyRefType cname == "_templates_fix_Foo" && show mName == "toto" then
+        trace "Special version" $ code ++ callSpecialized ++ callNormal
+      else
+        trace ("Translating method " ++ show mName ++ " of class " ++ qualifyRefType cname) $ code ++ callNormal
   | otherwise = code
   where
     mType = A.methodType m
@@ -188,13 +183,35 @@ callMethodWithFlow m cdecl@(A.Class {A.cname}) code
     mName = A.methodName m
     msg = expandMethodArgs (sendFlowMsg cname) m
     declFlow = Decl (flow, flowVar)
-    flowMk mtype = Call flowMkFn [AsExpr encoreCtxVar,
-                                  runtimeType mtype,
-                                  if Ty.isFlowType mType then 
-                                    AsExpr flowResultTypeFlow
-                                  else
-                                    AsExpr flowResultTypeValue]
-    assignFlow = Assign declFlow $ flowMk mType
+
+    callNormal = callGeneric assignNormal callMethodFlowName
+      where
+        assignNormal = Assign declFlow $ flowMk mType
+        flowMk mtype = Call flowMkFn [AsExpr encoreCtxVar,
+                                      runtimeType mtype,
+                                      if Ty.isFlowType mtype then 
+                                        AsExpr flowResultTypeFlow
+                                      else
+                                        AsExpr flowResultTypeValue]
+
+    callSpecialized = callGeneric assignFlow callMethodFlowNameSpecialized
+      where 
+        assignFlow = Assign declFlow $ flowMkSpec
+        flowMkSpec = Call flowMkFn [AsExpr encoreCtxVar,
+                                    runtimeType $ Ty.flowType Ty.bottomType,
+                                    AsExpr flowResultTypeFlow]
+
+    callGeneric assign nameFn = 
+      let retType = flow
+          fName = nameFn cname mName
+          args = formalMethodArgumentsZip cname m
+          fBody = Seq $
+            (parametricMethodTypeVars m) :
+            map (assignTypeVar cname) (Ty.getTypeParameters cname) ++
+            assign : 
+            Gc.ponyGcSendFlow (argPairs m) ++
+            msg ++ [retStmt]
+      in [Function retType fName args fBody]
 
 callMethodWithForward m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||

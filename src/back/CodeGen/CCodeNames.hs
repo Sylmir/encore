@@ -219,6 +219,10 @@ callMethodFlowName :: Ty.Type -> ID.Name -> CCode Name
 callMethodFlowName clazz mname =
   Nam $ callMethodFlowNameStr clazz mname
 
+callMethodFlowNameSpecialized :: Ty.Type -> ID.Name -> CCode Name
+callMethodFlowNameSpecialized clazz mname =
+  Nam $ callMethodFlowNameSpecializedStr clazz mname
+
 methodImplForwardName :: Ty.Type -> ID.Name -> CCode Name
 methodImplForwardName clazz mname =
   Nam $ methodImplForwardNameStr clazz mname
@@ -250,6 +254,10 @@ callMethodFutureNameStr clazz mname =
 callMethodFlowNameStr :: Ty.Type -> ID.Name -> String
 callMethodFlowNameStr clazz mname =
   methodImplNameStr clazz mname ++ "_flow"
+
+callMethodFlowNameSpecializedStr :: Ty.Type -> ID.Name -> String
+callMethodFlowNameSpecializedStr clazz mname =
+  methodImplNameStr clazz mname ++ "_flow__spec_flow"
 
 methodImplForwardNameStr :: Ty.Type -> ID.Name -> String
 methodImplForwardNameStr clazz mname =

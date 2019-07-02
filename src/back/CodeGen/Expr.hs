@@ -673,7 +673,10 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
     | isActive = do
         (ntarget, ttarget) <- translate target
         (initArgs, resultExpr) <- 
-          callTheMethodFlow ntarget targetTy name args typeArguments retTy
+          if sName == "toto" && (Ty.isFlowType . A.getType) (head args) then
+            trace "Special translation" $ callTheMethodFlowSpecialized ntarget targetTy name args typeArguments retTy
+          else
+            callTheMethodFlow ntarget targetTy name args typeArguments retTy
         (resultVar, handleResult) <- returnValue
         return (resultVar,
                 Seq $ ttarget : targetNullCheck (AsExpr ntarget) target name emeta " !! ":
@@ -687,6 +690,7 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
       returnValue = do 
         result <- Ctx.genNamedSym "flow" 
         return (Var result, Assign (Decl (translate retTy, Var result)))
+      sName = show name
 
   translate w@(A.DoWhile {A.cond, A.body}) = do
     (ncond,tcond) <- translate cond
@@ -1427,6 +1431,8 @@ callTheMethodOneway = callTheMethodForName methodImplOneWayName
 callTheMethodStream = callTheMethodForName methodImplStreamName
 
 callTheMethodFlow = callTheMethodForName callMethodFlowName
+
+callTheMethodFlowSpecialized = callTheMethodForName callMethodFlowNameSpecialized
 
 callTheMethodSync targetName targetType methodName args typeargs resultType = do
   (initArgs, expr) <- callTheMethodForName methodImplName
