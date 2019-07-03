@@ -203,6 +203,9 @@ selfTypeField = Nam $ encoreName "self_type" ""
 methodImplName :: Ty.Type -> ID.Name -> CCode Name
 methodImplName clazz mname = Nam $ methodImplNameStr clazz mname
 
+methodImplSpecFlowName :: Ty.Type -> ID.Name -> CCode Name
+methodImplSpecFlowName clazz mname = Nam $ methodImplSpecFlowNameStr clazz mname
+
 forwardingMethodImplName :: Ty.Type -> ID.Name -> CCode Name
 forwardingMethodImplName clazz mname =
   Nam $ forwardingMethodImplNameStr clazz mname
@@ -266,6 +269,10 @@ methodImplForwardNameStr clazz mname =
 methodImplOneWayNameStr :: Ty.Type -> ID.Name -> String
 methodImplOneWayNameStr clazz mname =
   methodImplNameStr clazz mname ++ "_one_way"
+
+methodImplSpecFlowNameStr :: Ty.Type -> ID.Name -> String
+methodImplSpecFlowNameStr clazz mname =
+  methodImplNameStr clazz mname ++ "__spec"
 
 constructorImplName :: Ty.Type -> CCode Name
 constructorImplName clazz =

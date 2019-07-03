@@ -123,7 +123,10 @@ generateHeader p =
                         ponyMsgTTypedef mdecl =
                             [Typedef (Struct $ futMsgTypeName cname (A.methodName mdecl)) (futMsgTypeName cname (A.methodName mdecl)),
                              Typedef (Struct $ oneWayMsgTypeName cname (A.methodName mdecl)) (oneWayMsgTypeName cname (A.methodName mdecl)),
-                             Typedef (Struct $ flowMsgTypeName cname (A.methodName mdecl)) (flowMsgTypeName cname (A.methodName mdecl))]
+                             Typedef (Struct $ flowMsgTypeName cname (A.methodName mdecl)) (flowMsgTypeName cname (A.methodName mdecl)),
+                             Typedef (Struct $ flowMsgTypeName cname specName) (flowMsgTypeName cname specName)]
+                            where
+                              specName  = ID.Name $ ((++ "__spec") . show . A.methodName) mdecl
 
      ponyMsgTImpls :: [CCode Toplevel]
      ponyMsgTImpls = map ponyMsgTImplsClass classes
@@ -148,7 +151,12 @@ generateHeader p =
                                          argspecsWithTypeParams)
                             ,StructDecl (AsType $ flowMsgTypeName cname (A.methodName mdecl))
                                         (encoreFlowMsgTSpec : 
-                                         argspecsWithTypeParams)]
+                                         argspecsWithTypeParams)
+                            ,StructDecl (AsType $ flowMsgTypeName cname specName)
+                                        (encoreFlowMsgTSpec : 
+                                        argspecsWithTypeParams)]
+                          where
+                            specName = ID.Name $ ((++ "__spec") . show . A.methodName) mdecl
                       argnamesWComments mdecl =
                           zipWith (\n name -> (Annotated (show name) (Var ("f"++show n))))
                                   ([1..]:: [Int])
@@ -173,7 +181,8 @@ generateHeader p =
                     meta = concatMap (\cdecl -> zip (repeat $ A.cname cdecl) (map A.methodName (A.cmethods cdecl))) classes
                     methodMsgNames = map (show . (uncurry futMsgId)) meta
                     oneWayMsgNames = map (show . (uncurry oneWayMsgId)) meta
-                    flowMethodMsgNames = map (show . (uncurry flowMsgId)) meta
+                    flowMethodMsgNames = map (show . (uncurry flowMsgId)) meta ++
+                                         map ((++ "__spec") . show . (uncurry flowMsgId)) meta
                 in
                        Enum $ (Nam "_MSG_DUMMY__ = 1024") : map Nam (methodMsgNames ++ oneWayMsgNames ++ flowMethodMsgNames)
 
@@ -215,7 +224,8 @@ generateHeader p =
          pairs = concatMap (\(t, hs) -> zip (repeat t) (map A.hname hs)) dicts
          syncs = map (show . uncurry msgId) pairs
          futs  = map (show . uncurry futMsgId) pairs
-         flows = map (show . uncurry flowMsgId) pairs
+         flows = map (show . uncurry flowMsgId) pairs ++ 
+                 map ((++ "__spec") . show . uncurry flowMsgId) pairs
          oneways = map (show . uncurry oneWayMsgId) pairs
        in Enum $ Nam "__TRAIT_METHOD_DUMMY__ = 1024" :
                  map Nam syncs ++
@@ -278,6 +288,7 @@ generateHeader p =
        else
          map (genericMethod callMethodFutureName future) nonStreamMethods ++
          map (genericMethod callMethodFlowName flow) nonStreamMethods ++
+         map (genericMethod callMethodFlowNameSpecialized flow) nonStreamMethods ++ 
          map (genericMethod methodImplOneWayName void) nonStreamMethods ++
          map (genericMethod methodImplStreamName stream) streamMethods ++
          map forwardingMethod nonStreamMethods

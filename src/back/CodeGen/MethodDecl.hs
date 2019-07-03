@@ -83,13 +83,26 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
                       ,Statement $ returnForForwardingMethod returnType
                       ,Return Skip]
                   )
+        specFlowMethodImpl =
+            Function returnType specName args
+              (Seq $ [dtraceMethodEntry thisVar mName argNames
+                      ,parametricMethodTypeVars
+                      ,extractTypeVars
+                      ,specBodys
+                      ,dtraceMethodExit thisVar mName
+                      ,returnStatement mType specBodyn]) -- mType ?
+
     in
       code ++ return (Concat $ locals ++ closures ++
                                [normalMethodImpl] ++
                                if (null $ Util.filter A.isForward mbody) ||
                                   (A.isMainMethod cname mName)
                                then []
-                               else [forwardingMethodImpl])
+                               else [forwardingMethodImpl]) ++ 
+                               if Ty.isTypeVar mType then
+                                 [specFlowMethodImpl]
+                               else
+                                 []
   where
       mName = A.methodName mdecl
       localNames = map (ID.qLocal . A.functionName) mlocals
@@ -100,6 +113,7 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
       locals = translateLocalFunctions newTable localized
       mType = A.methodType mdecl
       name = methodImplName cname (A.methodName mdecl)
+      specName = methodImplSpecFlowName cname (A.methodName mdecl)
       nameForwarding = forwardingMethodImplName cname (A.methodName mdecl)
       (encArgNames, encArgTypes) =
           unzip . map (A.pname &&& A.ptype) $ A.methodParams mdecl
@@ -111,6 +125,7 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
       ctx = Ctx.setMtdCtx (Ctx.new subst newTable) mdecl
       forwardingCtx = Ctx.setMtdCtx(Ctx.newWithForwarding subst newTable) mdecl
       ((bodyn,bodys),_) = runState (translate mbody) ctx
+      ((specBodyn, specBodys), _) = runState (translate mbody) (Ctx.setMtdCtx (Ctx.newWithFlow subst newTable) mdecl)
       ((forwardingBodyName,forwardingBody),_) =
         runState (translate mbody) forwardingCtx
       mTypeVars = A.methodTypeParams mdecl
@@ -181,10 +196,10 @@ callMethodWithFlow m cdecl@(A.Class {A.cname}) code
     mType = A.methodType m
     retStmt = Return flowVar
     mName = A.methodName m
-    msg = expandMethodArgs (sendFlowMsg cname) m
+    
     declFlow = Decl (flow, flowVar)
 
-    callNormal = callGeneric assignNormal callMethodFlowName
+    callNormal = callGeneric assignNormal callMethodFlowName msg
       where
         assignNormal = Assign declFlow $ flowMk mType
         flowMk mtype = Call flowMkFn [AsExpr encoreCtxVar,
@@ -193,15 +208,17 @@ callMethodWithFlow m cdecl@(A.Class {A.cname}) code
                                         AsExpr flowResultTypeFlow
                                       else
                                         AsExpr flowResultTypeValue]
+        msg = expandMethodArgs (sendFlowMsg cname) m
 
-    callSpecialized = callGeneric assignFlow callMethodFlowNameSpecialized
+    callSpecialized = callGeneric assignFlow callMethodFlowNameSpecialized msg
       where 
         assignFlow = Assign declFlow $ flowMkSpec
         flowMkSpec = Call flowMkFn [AsExpr encoreCtxVar,
                                     runtimeType $ Ty.flowType Ty.bottomType,
                                     AsExpr flowResultTypeFlow]
+        msg = expandMethodArgs (sendFlowMsgSpecialized cname) m
 
-    callGeneric assign nameFn = 
+    callGeneric assign nameFn msg = 
       let retType = flow
           fName = nameFn cname mName
           args = formalMethodArgumentsZip cname m
@@ -350,6 +367,16 @@ sendFlowMsg cname mname args tparams =
     argPairs = mkArgPairs args tparams ++ [(flowNam, flowNam)]
   in
     sendMsg cname mname msgId msgTypeName argPairs
+
+sendFlowMsgSpecialized :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
+sendFlowMsgSpecialized cname mname args tparams = 
+  let
+    (msgId, msgTypeName) = (uncurry flowMsgId &&& uncurry flowMsgTypeName) (cname, specName)
+    argPairs = mkArgPairs args tparams ++ [(flowNam, flowNam)]
+  in
+    sendMsg cname specName msgId msgTypeName argPairs
+  where
+    specName = ID.Name $ (show mname) ++ "__spec"
 
 sendOneWayMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
 sendOneWayMsg cname mname args tparams =
