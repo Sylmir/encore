@@ -135,7 +135,8 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                        gcReceive futVar futureTypeRecName ++ [pMethodDecl, methodCall])
                 ,(flowMsgId cname mName,
                   Seq $ unpackFlow : arguments' flowMsgTypeName ++
-                        gcReceive flowVar flowTypeRecName ++ [pMethodDecl, methodCallFlow])]
+                        gcReceive flowVar flowTypeRecName ++ [pMethodDecl, methodCallFlow False])
+               ] ++ flowSpec
 
            where
              (pMethodArrName, pMethodDecl) = arrMethodTypeVars mdecl
@@ -166,19 +167,34 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                                 map (AsLval . argName . A.pname) mParams))]
                else forwardMethodCall mName pMethodArrName mParams futVar
 
-             methodCallFlow = 
+             methodCallFlow spec = 
                if null $ Util.filter A.isForward (A.mbody mdecl)
                then Statement $ 
                         Call flowFulfilFn
                         [AsExpr encoreCtxVar,
                          AsExpr flowVar,
                          asEncoreArgT (translate $ A.methodType mdecl)
-                         (Call (methodImplName cname mName)
+                         (Call (if spec then 
+                                  methodImplSpecFlowName cname mName
+                                else
+                                  methodImplName cname mName)
                                (encoreCtxVar : thisVar :
                                pMethodArrName :
                                map (AsLval . argName . A.pname) mParams))]
                else Seq [Call (Nam "fprintf") [AsExpr stderr, (String "Can't use forward in a flow call (yet ?)")],
                          Call (Nam "exit") [Int 1]]
+
+             -- Specialize a function only if its return type is parametric
+             allowedForSpec = 
+               (Ty.isTypeVar . A.htype . A.mheader) mdecl
+
+             flowSpec = 
+               if allowedForSpec then
+                 [(flowMsgIdSpec cname mName,
+                   Seq $ unpackFlow : arguments' flowMsgTypeSpecFlowName ++
+                         gcReceive flowVar flowTypeRecName ++ [pMethodDecl, methodCallFlow True])]
+               else
+                 []
 
        forwardMethodCall = \mName pMethodArrName mParams lastArg ->
                              Call (forwardingMethodImplName cname mName)

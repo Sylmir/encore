@@ -126,7 +126,7 @@ generateHeader p =
                              Typedef (Struct $ flowMsgTypeName cname (A.methodName mdecl)) (flowMsgTypeName cname (A.methodName mdecl)),
                              Typedef (Struct $ flowMsgTypeName cname specName) (flowMsgTypeName cname specName)]
                             where
-                              specName  = ID.Name $ ((++ "__spec") . show . A.methodName) mdecl
+                              specName  = ID.Name $ specializeForFlow $ (show . A.methodName) mdecl
 
      ponyMsgTImpls :: [CCode Toplevel]
      ponyMsgTImpls = map ponyMsgTImplsClass classes
@@ -156,7 +156,7 @@ generateHeader p =
                                         (encoreFlowMsgTSpec : 
                                         argspecsWithTypeParams)]
                           where
-                            specName = ID.Name $ ((++ "__spec") . show . A.methodName) mdecl
+                            specName = ID.Name $ specializeForFlow $ (show . A.methodName) mdecl
                       argnamesWComments mdecl =
                           zipWith (\n name -> (Annotated (show name) (Var ("f"++show n))))
                                   ([1..]:: [Int])
@@ -182,7 +182,7 @@ generateHeader p =
                     methodMsgNames = map (show . (uncurry futMsgId)) meta
                     oneWayMsgNames = map (show . (uncurry oneWayMsgId)) meta
                     flowMethodMsgNames = map (show . (uncurry flowMsgId)) meta ++
-                                         map ((++ "__spec") . show . (uncurry flowMsgId)) meta
+                                         map (show . (uncurry flowMsgIdSpec)) meta
                 in
                        Enum $ (Nam "_MSG_DUMMY__ = 1024") : map Nam (methodMsgNames ++ oneWayMsgNames ++ flowMethodMsgNames)
 
@@ -225,7 +225,7 @@ generateHeader p =
          syncs = map (show . uncurry msgId) pairs
          futs  = map (show . uncurry futMsgId) pairs
          flows = map (show . uncurry flowMsgId) pairs ++ 
-                 map ((++ "__spec") . show . uncurry flowMsgId) pairs
+                 map (show . uncurry flowMsgIdSpec) pairs
          oneways = map (show . uncurry oneWayMsgId) pairs
        in Enum $ Nam "__TRAIT_METHOD_DUMMY__ = 1024" :
                  map Nam syncs ++

@@ -260,7 +260,7 @@ callMethodFlowNameStr clazz mname =
 
 callMethodFlowNameSpecializedStr :: Ty.Type -> ID.Name -> String
 callMethodFlowNameSpecializedStr clazz mname =
-  methodImplNameStr clazz mname ++ "_flow__spec_flow"
+  specializeForFlow $ callMethodFlowNameStr clazz mname
 
 methodImplForwardNameStr :: Ty.Type -> ID.Name -> String
 methodImplForwardNameStr clazz mname =
@@ -272,7 +272,7 @@ methodImplOneWayNameStr clazz mname =
 
 methodImplSpecFlowNameStr :: Ty.Type -> ID.Name -> String
 methodImplSpecFlowNameStr clazz mname =
-  methodImplNameStr clazz mname ++ "__spec"
+  specializeForFlow $ methodImplNameStr clazz mname
 
 constructorImplName :: Ty.Type -> CCode Name
 constructorImplName clazz =
@@ -436,6 +436,10 @@ flowMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
 flowMsgTypeName cls mname =
     Nam $ encoreName "flow_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
 
+flowMsgTypeSpecFlowName :: Ty.Type -> ID.Name -> CCode Name
+flowMsgTypeSpecFlowName cls mname =
+    Nam $ encoreName "flow_msg" (specializeForFlow (qualifyRefType cls ++ "_" ++ show mname) ++ "_t")
+
 oneWayMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
 oneWayMsgTypeName cls mname =
     Nam $ encoreName "oneway_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
@@ -451,6 +455,10 @@ futMsgId ref mname =
 flowMsgId :: Ty.Type -> ID.Name -> CCode Name
 flowMsgId ref mname =
     Nam $ encoreName "FLOW_MSG" (qualifyRefType ref ++ "_" ++ show mname)
+
+flowMsgIdSpec :: Ty.Type -> ID.Name -> CCode Name
+flowMsgIdSpec ref mname =
+  Nam $ encoreName "FLOW_MSG" (specializeForFlow $ qualifyRefType ref ++ "_" ++ show mname)
 
 oneWayMsgId :: Ty.Type -> ID.Name -> CCode Name
 oneWayMsgId cls mname =
@@ -676,3 +684,12 @@ stdout = Var "stdout"
 
 stderr :: CCode Lval
 stderr = Var "stderr"
+
+specialize :: String -> String
+specialize = (++ "__spec")
+
+specializeFor :: String -> String -> String
+specializeFor src ty = specialize src ++ "_" ++ ty
+
+specializeForFlow :: String -> String
+specializeForFlow src = specializeFor src "flow"

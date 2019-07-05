@@ -83,7 +83,7 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
                       ,Statement $ returnForForwardingMethod returnType
                       ,Return Skip]
                   )
-        specFlowMethodImpl =
+        specFlowMethodImpl = 
             Function returnType specName args
               (Seq $ [dtraceMethodEntry thisVar mName argNames
                       ,parametricMethodTypeVars
@@ -376,7 +376,7 @@ sendFlowMsgSpecialized cname mname args tparams =
   in
     sendMsg cname specName msgId msgTypeName argPairs
   where
-    specName = ID.Name $ (show mname) ++ "__spec"
+    specName = ID.Name $ specializeForFlow $ (show mname)
 
 sendOneWayMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
 sendOneWayMsg cname mname args tparams =

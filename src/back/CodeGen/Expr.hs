@@ -28,6 +28,123 @@ import qualified Data.Set as Set
 import Data.Maybe
 import Debug.Trace
 
+checkThisCallTemplate :: Ctx.Context -> Bool
+checkThisCallTemplate ctx =
+  case Ctx.getExecCtx ctx of
+    Ctx.FunctionContext fn  -> (Ty.isTypeVar . A.htype . A.funheader) fn
+    Ctx.MethodContext   met -> (Ty.isTypeVar . A.htype . A.mheader)   met
+    _ -> False
+
+hasFlowInArgs :: A.Arguments -> Bool
+hasFlowInArgs args = (> 0) $ length $ filter (Ty.isFlowType . A.getType) args
+
+checkBindingsForFlow :: A.FunctionHeader -> A.Arguments -> Bool
+checkBindingsForFlow header args =
+  let
+    params = map (A.ptype) $ A.hparams header
+    bindings = zip params args
+  in
+    (not . isNothing) $ find (\(ty, arg) -> Ty.isTypeVar ty && 
+                                            (Ty.isFlowType . A.getType) arg)
+                             bindings
+
+checkAtMostOneTypeVar :: A.FunctionHeader -> Ctx.Context -> Bool
+checkAtMostOneTypeVar header ctx = 
+  length getTypeVars <= 1 && (length . A.htypeparams) header <= 1
+  where 
+    getTypeVars :: [Ty.Type]
+    getTypeVars =
+      case Ctx.getExecCtx ctx of
+        Ctx.FunctionContext fn  -> (A.htypeparams . A.funheader)  fn
+        Ctx.MethodContext   met -> (A.htypeparams . A.mheader)    met
+        _ -> []
+
+requiresSpecializationAlg :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool
+requiresSpecializationAlg okTypeVar thisTemplate targetTemplate paramFlow flowCtx =
+  if okTypeVar then
+    if not thisTemplate then
+      if not targetTemplate then
+        False
+      else
+        paramFlow
+    else
+      if not targetTemplate then
+        False
+      else
+        flowCtx
+  else
+    False
+
+checkParameterFlow :: A.FunctionHeader -> A.Arguments -> Bool
+checkParameterFlow header args = 
+  if hasFlowInArgs args then
+    checkBindingsForFlow header args
+  else
+    False
+
+requiresSpecializationMethodCall :: A.Expr -> ID.Name -> A.Arguments -> [Ty.Type] -> Ctx.Context -> Bool
+requiresSpecializationMethodCall target name args typeArguments ctx =
+  let
+    isThisCallTemplate                = checkThisCallTemplate ctx
+    (targetMethod, isTargetTemplate)  = getTargetMethodAndTemplating
+    hasAtMostOneTypeVar               = checkAtMostOneTypeVar targetMethod ctx
+    isFlow                            = Ctx.isFlowCtx ctx
+    isParameterFlow                   = checkParameterFlow targetMethod args
+  in
+    requiresSpecializationAlg hasAtMostOneTypeVar
+                              isThisCallTemplate
+                              isTargetTemplate
+                              isParameterFlow
+                              isFlow
+  where
+    getTargetMethod :: A.FunctionHeader
+    getTargetMethod = Ctx.lookupMethod (A.getType target) name ctx
+
+    getTargetMethodAndTemplating :: (A.FunctionHeader, Bool)
+    getTargetMethodAndTemplating =
+      let
+        method = getTargetMethod
+      in
+        (method, (Ty.isTypeVar . A.htype) method)
+
+-- Indicates if a given expression requires a specialization when dealing with
+-- Flows
+requiresSpecialization :: A.Expr -> Ctx.Context -> Bool
+requiresSpecialization call@A.MessageSendFlow{A.emeta, A.target, A.name, A.args, A.typeArguments} ctx =
+  requiresSpecializationMethodCall target name args typeArguments ctx
+    
+requiresSpecialization call@A.MessageSend{A.emeta, A.target, A.name, A.args, A.typeArguments} ctx =
+  requiresSpecializationMethodCall target name args typeArguments ctx
+
+requiresSpecialization call@A.MethodCall{A.emeta, A.target, A.name, A.typeArguments, A.args} ctx = 
+  requiresSpecializationMethodCall target name args typeArguments ctx
+
+requiresSpecialization call@A.FunctionCall{A.emeta, A.typeArguments, A.qname, A.args} ctx =
+  let
+    isThisCallTemplate                  = checkThisCallTemplate ctx
+    (targetFunction, isTargetTemplate)  = getTargetFunctionAndTemplating
+    hasAtMostOneTypeVar                 = checkAtMostOneTypeVar targetFunction ctx
+    isParameterFlow                     = checkParameterFlow targetFunction args
+    isFlow                              = Ctx.isFlowCtx ctx
+  in
+    requiresSpecializationAlg hasAtMostOneTypeVar 
+                              isThisCallTemplate
+                              isTargetTemplate
+                              isParameterFlow
+                              isFlow
+  where
+    getTargetFunction :: A.FunctionHeader
+    getTargetFunction = snd $ Ctx.lookupFunction qname ctx
+
+    getTargetFunctionAndTemplating :: (A.FunctionHeader, Bool)
+    getTargetFunctionAndTemplating =
+      let
+        function = getTargetFunction
+      in
+        (function, (Ty.isTypeVar . A.htype) function)
+
+requiresSpecialization _ _ = False
+
 instance Translatable ID.BinaryOp (CCode Name) where
   translate op = Nam $ case op of
     ID.AND -> "&&"
@@ -653,14 +770,20 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
       isStream = Ty.isStreamType $ A.getType call
 
       delegateUseM msgSend sym = do
+        ctx <- get
         (ntarget, ttarget) <- translate target
         (initArgs, resultExpr) <-
-          msgSend ntarget targetTy name args typeArguments retTy
+          -- No check stream ? Handle msgSend
+          if requireSpec ctx && not isStream then 
+            msgSend ntarget targetTy name args typeArguments retTy
+          else
+            msgSend ntarget targetTy name args typeArguments retTy
         (resultVar, handleResult) <- returnValue
         return (resultVar,
                 Seq $ ttarget : targetNullCheck (AsExpr ntarget) target name emeta " ! " :
                       initArgs ++ [handleResult resultExpr])
         where
+          requireSpec = requiresSpecialization call
           retTy | isNothing sym = Ty.unitType
                 | otherwise = A.getType call
           returnValue | isNothing sym = return (unit, Statement)
@@ -671,12 +794,13 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
   -- Just handle Flows for now
   translate call@A.MessageSendFlow{A.emeta, A.target, A.name, A.args, A.typeArguments}
     | isActive = do
+        ctx <- trace ("Translating: " ++ show(name)) $ get
         (ntarget, ttarget) <- translate target
         (initArgs, resultExpr) <- 
-          if sName == "toto" && (Ty.isFlowType . A.getType) (head args) then
-            trace "Special translation" $ callTheMethodFlowSpecialized ntarget targetTy name args typeArguments retTy
+          if requiresSpecialization call ctx then
+            trace ("Special translation") $ callTheMethodFlowSpecialized ntarget targetTy name args typeArguments retTy
           else
-            callTheMethodFlow ntarget targetTy name args typeArguments retTy
+            trace ("No special translation") $ callTheMethodFlow ntarget targetTy name args typeArguments retTy
         (resultVar, handleResult) <- returnValue
         return (resultVar,
                 Seq $ ttarget : targetNullCheck (AsExpr ntarget) target name emeta " !! ":
@@ -690,7 +814,6 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
       returnValue = do 
         result <- Ctx.genNamedSym "flow" 
         return (Var result, Assign (Decl (translate retTy, Var result)))
-      sName = show name
 
   translate w@(A.DoWhile {A.cond, A.body}) = do
     (ncond,tcond) <- translate cond
@@ -1581,3 +1704,4 @@ runtimeTypeArguments typeArgs = do
       rtArrayInit = Seq $ zipWith (\i t -> Assign (ArrAcc i tmpArray) t)
                                   [0..] runtimeTypes
   return (tmpArray, Seq [rtArrayAssign, rtArrayInit])
+
