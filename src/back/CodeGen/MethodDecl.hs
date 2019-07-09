@@ -193,7 +193,7 @@ callMethodWithFuture m cdecl@(A.Class {A.cname}) code
 callMethodWithFlow m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||
     A.isShared cdecl = 
-      if qualifyRefType cname == "_templates_fix_Foo" && show mName == "toto" then
+      if Ty.isTypeVar mType then
         trace "Special version" $ code ++ callSpecialized ++ callNormal
       else
         trace ("Translating method " ++ show mName ++ " of class " ++ qualifyRefType cname) $ code ++ callNormal
