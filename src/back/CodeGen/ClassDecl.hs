@@ -101,7 +101,7 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
 
        methodClause m = mthdDispatchClause m mArgs ++
                         if not (A.isStreamMethod m)
-                        then [oneWaySendDispatchClause m mArgs]
+                        then oneWaySendDispatchClause m mArgs
                         else []
          where
            mArgs = (A.methodName &&& A.methodParams) m
@@ -132,7 +132,7 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
            | otherwise =
                [(futMsgId cname mName,
                  Seq $ unpackFuture : arguments' futMsgTypeName ++
-                       gcReceive futVar futureTypeRecName ++ [pMethodDecl, methodCall])
+                       gcReceive futVar futureTypeRecName ++ [pMethodDecl, methodCall False])
                 ,(flowMsgId cname mName,
                   Seq $ unpackFlow : arguments' flowMsgTypeName ++
                         gcReceive flowVar flowTypeRecName ++ [pMethodDecl, methodCallFlow False])
@@ -154,14 +154,17 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                                    nullVar :
                                    futVar :
                                    map (AsLval . argName . A.pname) mParams)
-             methodCall =
+             methodCall spec =
                Statement $
                if null $ Util.filter A.isForward (A.mbody mdecl)
                then Call futureFulfil
                          [AsExpr encoreCtxVar,
                           AsExpr $ futVar,
                           asEncoreArgT (translate $ A.methodType mdecl)
-                          (Call (methodImplName cname mName)
+                          (Call (if spec then 
+                                   methodImplSpecFlowName cname mName
+                                 else
+                                   methodImplName cname mName)
                                 (encoreCtxVar : thisVar :
                                 pMethodArrName :
                                 map (AsLval . argName . A.pname) mParams))]
@@ -185,14 +188,17 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                          Call (Nam "exit") [Int 1]]
 
              -- Specialize a function only if its return type is parametric
-             allowedForSpec = 
+             allowedForFlowSpec = 
                (Ty.isTypeVar . A.htype . A.mheader) mdecl
 
              flowSpec = 
-               if allowedForSpec then
-                 [(flowMsgIdSpec cname mName,
-                   Seq $ unpackFlow : arguments' flowMsgTypeSpecFlowName ++
-                         gcReceive flowVar flowTypeRecName ++ [pMethodDecl, methodCallFlow True])]
+               if allowedForFlowSpec then
+                 [(flowMsgSpecFlowId cname mName,
+                   Seq $ unpackFlow : arguments' flowMsgSpecFlowTypeName ++
+                         gcReceive flowVar flowTypeRecName ++ [pMethodDecl, methodCallFlow True]),
+                  (futMsgSpecFlowId cname mName,
+                   Seq $ unpackFuture : arguments' futMsgSpecFlowTypeName ++
+                         gcReceive futVar futureTypeRecName ++ [pMethodDecl, methodCall True])]
                else
                  []
 
@@ -205,17 +211,29 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
        arguments mdecl ptr = methodUnpackArguments mdecl (Ptr . AsType $ ptr)
        oneWaySendDispatchClause mdecl (mName, mParams) =
            let ptr = oneWayMsgTypeName cname mName
-           in (oneWayMsgId cname mName,
+           in [(oneWayMsgId cname mName,
                Seq $ arguments mdecl ptr ++
-                     gcReceive ++ [pMethodDecl, methodCall])
+                     gcReceive ++ [pMethodDecl, methodCall False])] ++ 
+              if allowedForFlowSpec then
+                [(oneWayMsgSpecFlowId cname mName,
+                 Seq $ arguments mdecl ptr ++ 
+                       gcReceive ++ [pMethodDecl, methodCall True])]
+              else
+                []
            where
+             allowedForFlowSpec = 
+               (Ty.isTypeVar . A.htype . A.mheader) mdecl
+               
              (pMethodArrName, pMethodDecl) = arrMethodTypeVars mdecl
              gcReceive = gcRecv mParams
                          (Comm "Not tracing the future in a oneWay send")
-             methodCall =
+             methodCall spec =
                Statement $
                  if null $ Util.filter A.isForward (A.mbody mdecl)
-                 then Call (methodImplName cname mName)
+                 then Call (if spec then 
+                             (methodImplSpecFlowName cname mName)
+                           else 
+                             (methodImplName cname mName))
                            (encoreCtxVar : thisVar : pMethodArrName :
                            map (AsLval . argName . A.pname) mParams)
                  else forwardMethodCall mName pMethodArrName mParams nullVar

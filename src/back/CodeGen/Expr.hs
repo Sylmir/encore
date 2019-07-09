@@ -761,21 +761,20 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
                            ,recvNullCheck
                            ,tCall
                            ])
-    | Util.isStatement call = delegateUseM callTheMethodOneway Nothing
-    | isActive && isStream = delegateUseM callTheMethodStream (Just "stream")
-    | otherwise = delegateUseM callTheMethodFuture (Just "fut")
+    | Util.isStatement call = delegateUseM callTheMethodOneway callTheMethodOnewaySpecFlow Nothing
+    | isActive && isStream = delegateUseM callTheMethodStream callTheMethodStreamSpecFlow (Just "stream")
+    | otherwise = delegateUseM callTheMethodFuture callTheMethodFutureSpecFlow (Just "fut")
     where
       targetTy = A.getType target
       isActive = Ty.isActiveSingleType targetTy
       isStream = Ty.isStreamType $ A.getType call
 
-      delegateUseM msgSend sym = do
+      delegateUseM msgSend msgSendFlow sym = do
         ctx <- get
         (ntarget, ttarget) <- translate target
         (initArgs, resultExpr) <-
-          -- No check stream ? Handle msgSend
-          if requireSpec ctx && not isStream then 
-            msgSend ntarget targetTy name args typeArguments retTy
+          if requireSpec ctx then 
+            msgSendFlow ntarget targetTy name args typeArguments retTy
           else
             msgSend ntarget targetTy name args typeArguments retTy
         (resultVar, handleResult) <- returnValue
@@ -798,7 +797,7 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
         (ntarget, ttarget) <- translate target
         (initArgs, resultExpr) <- 
           if requiresSpecialization call ctx then
-            trace ("Special translation") $ callTheMethodFlowSpecialized ntarget targetTy name args typeArguments retTy
+            trace ("Special translation") $ callTheMethodFlowSpecFlow ntarget targetTy name args typeArguments retTy
           else
             trace ("No special translation") $ callTheMethodFlow ntarget targetTy name args typeArguments retTy
         (resultVar, handleResult) <- returnValue
@@ -1546,16 +1545,22 @@ indexArgument msgName i = Arrow msgName (Nam $ "f" ++ show i)
 
 callTheMethodFuture = callTheMethodForName callMethodFutureName
 
+callTheMethodFutureSpecFlow = callTheMethodForName callMethodFutureSpecFlowName
+
 callTheMethodForward extras =
   callTheMethodForNameWithExtraArguments extras methodImplForwardName
 
 callTheMethodOneway = callTheMethodForName methodImplOneWayName
 
+callTheMethodOnewaySpecFlow = callTheMethodForName methodImplOneWaySpecFlowName
+
 callTheMethodStream = callTheMethodForName methodImplStreamName
+
+callTheMethodStreamSpecFlow = callTheMethodForName methodImplStreamSpecFlowName
 
 callTheMethodFlow = callTheMethodForName callMethodFlowName
 
-callTheMethodFlowSpecialized = callTheMethodForName callMethodFlowNameSpecialized
+callTheMethodFlowSpecFlow = callTheMethodForName callMethodFlowSpecFlowName
 
 callTheMethodSync targetName targetType methodName args typeargs resultType = do
   (initArgs, expr) <- callTheMethodForName methodImplName

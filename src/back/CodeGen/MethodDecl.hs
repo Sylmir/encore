@@ -163,26 +163,32 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
 callMethodWithFuture m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||
     A.isShared cdecl =
-    let retType = future
-        fName = callMethodFutureName cname mName
-        args = formalMethodArgumentsZip cname m
-        fBody = Seq $
-           (parametricMethodTypeVars m) :
-           map (assignTypeVar cname) (Ty.getTypeParameters cname) ++
-           assignFut :
-           Gc.ponyGcSendFuture (argPairs m) ++
-           msg ++ [retStmt]
-    in code ++ [Function retType fName args fBody]
+      code ++ callStandard ++ if Ty.isTypeVar mType then callSpecFlow else []
   | otherwise = code
   where
     mType = A.methodType m
     retStmt = Return futVar
     mName = A.methodName m
-    msg = expandMethodArgs (sendFutMsg cname) m
     declFut = Decl (future, futVar)
     futureMk mtype = Call futureMkFn [AsExpr encoreCtxVar,
                                       runtimeType mtype]
     assignFut = Assign declFut $ futureMk mType
+
+    callStandard = callGeneric callMethodFutureName sendFutMsg
+    callSpecFlow = callGeneric callMethodFutureSpecFlowName sendFutMsgSpecFlow
+
+    callGeneric callMethodFn msgFn =
+      let retType = future
+          fName = callMethodFn cname mName
+          args = formalMethodArgumentsZip cname m
+          fBody = Seq $ 
+            (parametricMethodTypeVars m) :
+            map (assignTypeVar cname) (Ty.getTypeParameters cname) ++
+            assignFut :
+            Gc.ponyGcSendFuture (argPairs m) ++
+            expandMethodArgs (msgFn cname) m ++ 
+            [retStmt]
+      in [Function retType fName args fBody]
 
 callMethodWithFlow m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||
@@ -210,13 +216,13 @@ callMethodWithFlow m cdecl@(A.Class {A.cname}) code
                                         AsExpr flowResultTypeValue]
         msg = expandMethodArgs (sendFlowMsg cname) m
 
-    callSpecialized = callGeneric assignFlow callMethodFlowNameSpecialized msg
+    callSpecialized = callGeneric assignFlow callMethodFlowSpecFlowName msg
       where 
         assignFlow = Assign declFlow $ flowMkSpec
         flowMkSpec = Call flowMkFn [AsExpr encoreCtxVar,
                                     runtimeType $ Ty.flowType Ty.bottomType,
                                     AsExpr flowResultTypeFlow]
-        msg = expandMethodArgs (sendFlowMsgSpecialized cname) m
+        msg = expandMethodArgs (sendFlowMsgSpecFlow cname) m
 
     callGeneric assign nameFn msg = 
       let retType = flow
@@ -282,15 +288,22 @@ parametricMethodTypeVars m = Seq $ zipWith assignTypeVarMethod mTypeVars [0..]
 callMethodOneWay m cdecl@(A.Class {A.cname}) _ code
   | A.isActive cdecl ||
     A.isShared cdecl =
+      code ++ callStandard ++ if Ty.isTypeVar (A.methodType m) then callSpecFlow else []
+  | otherwise = code
+  where
+    callGeneric methodImplFn sendMsgFn =
       let retType = void
-          fName = methodImplOneWayName cname mName
+          fName = methodImplFn cname mName
           args = formalMethodArguments cname ++ zip argTypes argNames
           extractedTypeVars = map assignTypeVar (Ty.getTypeParameters cname)
           fBody = Seq $ parametricMethodTypeVars : extractedTypeVars ++
-                        Gc.ponyGcSendOneway argPairs ++ msg
-      in code ++ [Function retType fName args fBody]
-  | otherwise = code
-  where
+                        Gc.ponyGcSendOneway argPairs ++ (expandMethodArgs (sendMsgFn cname) m)
+      in 
+        [Function retType fName args fBody]
+
+    callStandard = callGeneric methodImplOneWayName sendOneWayMsg
+    callSpecFlow = callGeneric methodImplOneWaySpecFlowName sendOneWayMsgSpecFlow
+
     mName = A.methodName m
     mParams = A.methodParams m
     argNames = map (AsLval . argName . A.pname) mParams
@@ -352,47 +365,49 @@ mkArgPairs args tparams =
     let fields = [Nam $ "f" ++ show i | i <- [1..length args]]
     in zip fields args ++ zip tparams tparams
 
-sendFutMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
-sendFutMsg cname mname args tparams =
+sendMsgGen :: (Ty.Type -> ID.Name -> CCode Name) ->
+              (Ty.Type -> ID.Name -> CCode Name) ->
+              [(CCode Name, CCode Name)] ->
+              Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] ->
+              [CCode Stat]
+sendMsgGen msgIdFn msgTypeNameFn additionalArgPairs cname mname args tparams =
   let
-    (msgId, msgTypeName) = (uncurry futMsgId &&& uncurry futMsgTypeName) (cname, mname)
-    argPairs = mkArgPairs args tparams ++ [(futNam, futNam)]
+    (msgId, msgTypeName) = (uncurry msgIdFn &&& uncurry msgTypeNameFn) (cname, mname)
+    argPairs = mkArgPairs args tparams ++ additionalArgPairs
   in
     sendMsg cname mname msgId msgTypeName argPairs
+
+sendFutMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
+sendFutMsg =
+  sendMsgGen futMsgId futMsgTypeName [(futNam, futNam)]
+
+sendFutMsgSpecFlow :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
+sendFutMsgSpecFlow =
+  sendMsgGen futMsgSpecFlowId futMsgSpecFlowTypeName [(futNam, futNam)]
 
 sendFlowMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
-sendFlowMsg cname mname args tparams =
-  let
-    (msgId, msgTypeName) = (uncurry flowMsgId &&& uncurry flowMsgTypeName) (cname, mname)
-    argPairs = mkArgPairs args tparams ++ [(flowNam, flowNam)]
-  in
-    sendMsg cname mname msgId msgTypeName argPairs
+sendFlowMsg =
+  sendMsgGen flowMsgId flowMsgTypeName [(flowNam, flowNam)]
 
-sendFlowMsgSpecialized :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
-sendFlowMsgSpecialized cname mname args tparams = 
-  let
-    (msgId, msgTypeName) = (uncurry flowMsgId &&& uncurry flowMsgTypeName) (cname, specName)
-    argPairs = mkArgPairs args tparams ++ [(flowNam, flowNam)]
-  in
-    sendMsg cname specName msgId msgTypeName argPairs
-  where
-    specName = ID.Name $ specializeForFlow $ (show mname)
+sendFlowMsgSpecFlow :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
+sendFlowMsgSpecFlow = 
+  sendMsgGen flowMsgSpecFlowId flowMsgSpecFlowTypeName [(flowNam, flowNam)]
 
 sendOneWayMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
-sendOneWayMsg cname mname args tparams =
-  let
-    (msgId, msgTypeName) = (uncurry oneWayMsgId &&& uncurry oneWayMsgTypeName) (cname, mname)
-    argPairs = mkArgPairs args tparams
-  in
-    sendMsg cname mname msgId msgTypeName argPairs
+sendOneWayMsg =
+  sendMsgGen oneWayMsgId oneWayMsgTypeName []
+
+sendOneWayMsgSpecFlow :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
+sendOneWayMsgSpecFlow =
+  sendMsgGen oneWayMsgSpecFlowId oneWayMsgSpecFlowTypeName []
 
 sendStreamMsg :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
-sendStreamMsg cname mname args tparams =
-  let
-    (msgId, msgTypeName) = (uncurry futMsgId &&& uncurry futMsgTypeName) (cname, mname)
-    argPairs = mkArgPairs args tparams ++ [(futNam, Nam "_stream")]
-  in
-    sendMsg cname mname msgId msgTypeName argPairs
+sendStreamMsg =
+  sendMsgGen futMsgId futMsgTypeName [(futNam, Nam "_stream")]
+
+sendStreamMsgSpecFlow :: Ty.Type -> ID.Name -> [CCode Name] -> [CCode Name] -> [CCode Stat]
+sendStreamMsgSpecFlow =
+  sendMsgGen futMsgSpecFlowId futMsgSpecFlowTypeName [(futNam, Nam "_stream")]
 
 sendMsg :: Ty.Type -> ID.Name -> CCode Name -> CCode Name
   -> [(CCode Name, CCode Name)]

@@ -218,26 +218,41 @@ callMethodFutureName :: Ty.Type -> ID.Name -> CCode Name
 callMethodFutureName clazz mname =
   Nam $ callMethodFutureNameStr clazz mname
 
+callMethodFutureSpecFlowName :: Ty.Type -> ID.Name -> CCode Name
+callMethodFutureSpecFlowName clazz mname = 
+  Nam $ specializeForFlow $ callMethodFutureNameStr clazz mname
+
 callMethodFlowName :: Ty.Type -> ID.Name -> CCode Name
 callMethodFlowName clazz mname =
   Nam $ callMethodFlowNameStr clazz mname
 
-callMethodFlowNameSpecialized :: Ty.Type -> ID.Name -> CCode Name
-callMethodFlowNameSpecialized clazz mname =
-  Nam $ callMethodFlowNameSpecializedStr clazz mname
+callMethodFlowSpecFlowName :: Ty.Type -> ID.Name -> CCode Name
+callMethodFlowSpecFlowName clazz mname =
+  Nam $ specializeForFlow $ callMethodFlowNameStr clazz mname
 
 methodImplForwardName :: Ty.Type -> ID.Name -> CCode Name
 methodImplForwardName clazz mname =
   Nam $ methodImplForwardNameStr clazz mname
 
+methodImplForwardSpecFlowName :: Ty.Type -> ID.Name -> CCode Name
+methodImplForwardSpecFlowName clazz mname =
+  Nam $ specializeForFlow $ methodImplForwardNameStr clazz mname
+
 methodImplOneWayName :: Ty.Type -> ID.Name -> CCode Name
 methodImplOneWayName clazz mname =
   Nam $ methodImplOneWayNameStr clazz mname
 
+methodImplOneWaySpecFlowName :: Ty.Type -> ID.Name -> CCode Name
+methodImplOneWaySpecFlowName clazz mname =
+  Nam $ specializeForFlow $ methodImplOneWayNameStr clazz mname
+
 methodImplStreamName :: Ty.Type -> ID.Name -> CCode Name
 methodImplStreamName clazz mname =
-  Nam $ encoreName "method" $ printf "%s_%s_stream"
-                              (qualifyRefType clazz) (show mname)
+  Nam $ methodImplStreamNameStr clazz mname
+
+methodImplStreamSpecFlowName :: Ty.Type -> ID.Name ->   CCode Name
+methodImplStreamSpecFlowName clazz mname =
+  Nam $ specializeForFlow $ methodImplStreamNameStr clazz mname
 
 methodImplNameStr :: Ty.Type -> ID.Name -> String
 methodImplNameStr clazz mname =
@@ -258,10 +273,6 @@ callMethodFlowNameStr :: Ty.Type -> ID.Name -> String
 callMethodFlowNameStr clazz mname =
   methodImplNameStr clazz mname ++ "_flow"
 
-callMethodFlowNameSpecializedStr :: Ty.Type -> ID.Name -> String
-callMethodFlowNameSpecializedStr clazz mname =
-  specializeForFlow $ callMethodFlowNameStr clazz mname
-
 methodImplForwardNameStr :: Ty.Type -> ID.Name -> String
 methodImplForwardNameStr clazz mname =
   methodImplNameStr clazz mname ++ "_forward"
@@ -273,6 +284,11 @@ methodImplOneWayNameStr clazz mname =
 methodImplSpecFlowNameStr :: Ty.Type -> ID.Name -> String
 methodImplSpecFlowNameStr clazz mname =
   specializeForFlow $ methodImplNameStr clazz mname
+
+methodImplStreamNameStr :: Ty.Type -> ID.Name -> String
+methodImplStreamNameStr clazz mname =
+  encoreName "method" $ printf "%s_%s_stream"
+                        (qualifyRefType clazz) (show mname)
 
 constructorImplName :: Ty.Type -> CCode Name
 constructorImplName clazz =
@@ -428,41 +444,73 @@ ponyAllocMsgName = Nam "pony_alloc_msg"
 poolIndexName :: CCode Name
 poolIndexName = Nam "POOL_INDEX"
 
+msgTypeNameStr :: String -> Ty.Type -> ID.Name -> String
+msgTypeNameStr s cls mname =
+  encoreName (s ++ "_msg") (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
+
+msgSpecFlowTypeNameStr :: String -> Ty.Type -> ID.Name -> String
+msgSpecFlowTypeNameStr s cls mname =
+  encoreName (s ++ "_msg") (specializeForFlow (qualifyRefType cls ++ "_" ++ show mname) ++ "_t")
+
 futMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
 futMsgTypeName cls mname =
-    Nam $ encoreName "fut_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
+    Nam $ msgTypeNameStr "fut" cls mname
+
+futMsgSpecFlowTypeName :: Ty.Type -> ID.Name -> CCode Name
+futMsgSpecFlowTypeName cls mname =
+  Nam $ msgSpecFlowTypeNameStr "fut" cls mname
 
 flowMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
 flowMsgTypeName cls mname =
-    Nam $ encoreName "flow_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
+  Nam $ msgTypeNameStr "flow" cls mname
 
-flowMsgTypeSpecFlowName :: Ty.Type -> ID.Name -> CCode Name
-flowMsgTypeSpecFlowName cls mname =
-    Nam $ encoreName "flow_msg" (specializeForFlow (qualifyRefType cls ++ "_" ++ show mname) ++ "_t")
+flowMsgSpecFlowTypeName :: Ty.Type -> ID.Name -> CCode Name
+flowMsgSpecFlowTypeName cls mname =
+  Nam $ msgSpecFlowTypeNameStr "flow" cls mname
 
 oneWayMsgTypeName :: Ty.Type -> ID.Name -> CCode Name
 oneWayMsgTypeName cls mname =
-    Nam $ encoreName "oneway_msg" (qualifyRefType cls ++ "_" ++ show mname ++ "_t")
+  Nam $ msgTypeNameStr "oneway" cls mname
+
+oneWayMsgSpecFlowTypeName :: Ty.Type -> ID.Name -> CCode Name
+oneWayMsgSpecFlowTypeName cls mname =
+  Nam $ msgSpecFlowTypeNameStr "oneway" cls mname
 
 msgId :: Ty.Type -> ID.Name -> CCode Name
 msgId ref mname =
-    Nam $ encoreName "MSG" (qualifyRefType ref ++ "_" ++ show mname)
+  Nam $ encoreName "MSG" (qualifyRefType ref ++ "_" ++ show mname)
+
+msgIdStr :: String -> Ty.Type -> ID.Name -> String
+msgIdStr s ref mname =
+  encoreName (s ++ "_MSG") (qualifyRefType ref ++ "_" ++ show mname)
+
+msgSpecFlowIdStr :: String -> Ty.Type -> ID.Name -> String
+msgSpecFlowIdStr s ref mname =
+  encoreName (s ++ "_MSG") (specializeForFlow $ qualifyRefType ref ++ "_" ++ show mname)
 
 futMsgId :: Ty.Type -> ID.Name -> CCode Name
 futMsgId ref mname =
-    Nam $ encoreName "FUT_MSG" (qualifyRefType ref ++ "_" ++ show mname)
+  Nam $ msgIdStr "FUT" ref mname
+
+futMsgSpecFlowId :: Ty.Type -> ID.Name -> CCode Name
+futMsgSpecFlowId ref mname =
+  Nam $ msgSpecFlowIdStr "FUT" ref mname
 
 flowMsgId :: Ty.Type -> ID.Name -> CCode Name
 flowMsgId ref mname =
-    Nam $ encoreName "FLOW_MSG" (qualifyRefType ref ++ "_" ++ show mname)
+  Nam $ msgIdStr "FLOW" ref mname
 
-flowMsgIdSpec :: Ty.Type -> ID.Name -> CCode Name
-flowMsgIdSpec ref mname =
-  Nam $ encoreName "FLOW_MSG" (specializeForFlow $ qualifyRefType ref ++ "_" ++ show mname)
+flowMsgSpecFlowId :: Ty.Type -> ID.Name -> CCode Name
+flowMsgSpecFlowId ref mname =
+  Nam $ msgSpecFlowIdStr "FLOW" ref mname
 
 oneWayMsgId :: Ty.Type -> ID.Name -> CCode Name
 oneWayMsgId cls mname =
-    Nam $ encoreName "ONEWAY_MSG" (qualifyRefType cls ++ "_" ++ show mname)
+  Nam $ msgIdStr "ONEWAY" cls mname
+
+oneWayMsgSpecFlowId :: Ty.Type -> ID.Name -> CCode Name
+oneWayMsgSpecFlowId cls mname =
+  Nam $ msgSpecFlowIdStr "ONEWAY" cls mname
 
 typeNamePrefix :: Ty.Type -> String
 typeNamePrefix ref
