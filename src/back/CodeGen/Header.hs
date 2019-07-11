@@ -181,7 +181,9 @@ generateHeader p =
 
      globalFunctions =
        [globalFunctionDecl f | f <- functions] ++
+       [globalFunctionSpecFlowDecl f | f <- functions] ++
        [functionWrapperDecl f | f <- functions] ++
+       [functionWrapperSpecFlowDecl f | f <- functions] ++
        [globalFunctionClosureDecl f | f <- functions]
 
      messageEnums =

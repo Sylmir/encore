@@ -364,6 +364,14 @@ localFunctionName :: ID.QualifiedName -> CCode Name
 localFunctionName funname =
     Nam $ encoreName "local_fun" (qualifiedToString funname)
 
+globalFunctionSpecFlowName :: ID.QualifiedName -> CCode Name
+globalFunctionSpecFlowName funname =
+  Nam $ encoreName "global_fun" (specializeForFlow $ qualifiedToString funname)
+
+localFunctionSpecFlowName :: ID.QualifiedName -> CCode Name
+localFunctionSpecFlowName funname =
+  Nam $ encoreName "local_fun" (specializeForFlow $ qualifiedToString funname)
+
 globalFunctionNameOf :: A.Function -> CCode Name
 globalFunctionNameOf f@A.Function{A.funsource} =
   globalFunctionName $ ID.setSourceFile funsource $
@@ -378,6 +386,23 @@ functionWrapperNameOf :: A.Function -> CCode Name
 functionWrapperNameOf f@A.Function{A.funsource} =
   Nam $ encoreName "fun_wrapper" $
       qualifiedToString $
+      ID.setSourceFile funsource $
+      ID.topLevelQName $ A.functionName f
+
+globalFunctionSpecFlowNameOf :: A.Function -> CCode Name
+globalFunctionSpecFlowNameOf f@A.Function{A.funsource} =
+  globalFunctionSpecFlowName $ ID.setSourceFile funsource $
+                               ID.topLevelQName $ A.functionName f
+
+localFunctionSpecFlowNameOf :: A.Function -> CCode Name
+localFunctionSpecFlowNameOf f@A.Function{A.funsource} =
+  localFunctionSpecFlowName $ ID.setSourceFile funsource $
+                              ID.topLevelQName $ A.functionName f
+
+functionWrapperSpecFlowNameOf :: A.Function -> CCode Name
+functionWrapperSpecFlowNameOf f@A.Function{A.funsource} =
+  Nam $ encoreName "fun_wrapper" $
+      specializeForFlow $ qualifiedToString $
       ID.setSourceFile funsource $
       ID.topLevelQName $ A.functionName f
 

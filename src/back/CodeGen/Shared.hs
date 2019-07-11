@@ -29,8 +29,10 @@ generateShared prog@(A.Program{A.source, A.classes, A.functions, A.imports}) tab
       [mainFunction]
     where
       globalFunctions =
-        [translate f table globalFunction | f <- functions] ++
+        [translate f table globalFunction False | f <- functions] ++
+        [translate f table globalFunctionSpecFlow True | f <- functions] ++
         [globalFunctionWrapper f | f <- functions] ++
+        [globalFunctionSpecFlowWrapper f | f <- functions] ++
         [initFunctionClosure f | f <- functions]
 
       embeddedCode = embedded prog

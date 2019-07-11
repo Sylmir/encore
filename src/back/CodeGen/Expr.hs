@@ -1507,7 +1507,7 @@ functionCall :: A.Expr -> State Ctx.Context (CCode Lval, CCode Stat)
 functionCall fcall@A.FunctionCall{A.typeArguments = typeArguments
                                  ,A.qname
                                  ,A.args} = do
-  (argNames, initArgs) <- unzip <$> mapM translate args
+  (argNames, initArgs) <- trace ("Translating " ++ show qname) $ unzip <$> mapM translate args
   (callVar, call) <- buildFunctionCallExpr args argNames
   let ret = if Ty.isUnitType typ then unit else callVar
 
@@ -1522,11 +1522,12 @@ functionCall fcall@A.FunctionCall{A.typeArguments = typeArguments
           actualTypes = map A.getType args
           castedArguments = zipWith3 castArguments expectedTypes cArgs actualTypes
 
+      ctx <- get
       let runtimeTypes = map runtimeType typeArguments
       (tmpType, tmpTypeDecl) <- tmpArr (Ptr ponyTypeT) runtimeTypes
       (cname, header) <- gets (Ctx.lookupFunction qname)
       let runtimeTypeVar = if null runtimeTypes then nullVar else tmpType
-          prototype = Call cname
+          prototype = Call (if requiresSpecialization fcall ctx then Nam $ specializeForFlow $ show cname else cname)
                            (map AsExpr [encoreCtxVar, runtimeTypeVar] ++ castedArguments)
       rPrototype <- unwrapReturnType prototype
       (callVar, call) <- namedTmpVar "fun_call" typ rPrototype

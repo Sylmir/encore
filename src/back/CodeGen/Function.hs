@@ -55,11 +55,23 @@ globalFunction fun body = createFunction fun globalFunctionNameOf (Just body)
 localFunction :: A.Function -> CCode Stat -> CCode Toplevel
 localFunction fun body = createFunction fun localFunctionNameOf (Just body)
 
+globalFunctionSpecFlow :: A.Function -> CCode Stat -> CCode Toplevel
+globalFunctionSpecFlow fun body = createFunction fun globalFunctionSpecFlowNameOf (Just body)
+
+localFunctionSpecFlow :: A.Function -> CCode Stat -> CCode Toplevel
+localFunctionSpecFlow fun body = createFunction fun localFunctionSpecFlowNameOf (Just body)
+
 globalFunctionDecl :: A.Function -> CCode Toplevel
 globalFunctionDecl f = createFunction f globalFunctionNameOf Nothing
 
 localFunctionDecl :: A.Function -> CCode Toplevel
 localFunctionDecl f = createFunction f localFunctionNameOf Nothing
+
+globalFunctionSpecFlowDecl :: A.Function -> CCode Toplevel
+globalFunctionSpecFlowDecl f = createFunction f globalFunctionSpecFlowNameOf Nothing
+
+localFunctionSpecFlowDecl :: A.Function -> CCode Toplevel
+localFunctionSpecFlowDecl f = createFunction f localFunctionSpecFlowNameOf Nothing
 
 functionClosureDecl :: (A.Function -> CCode Name) -> A.Function
                     -> CCode Toplevel
@@ -86,6 +98,12 @@ functionWrapperDecl f =
   FunctionDecl (Typ "value_t") (functionWrapperNameOf f)
                [Ptr (Ptr encoreCtxT), Ptr (Ptr ponyTypeT),
                 Ptr $ Typ "value_t", Ptr void]
+
+functionWrapperSpecFlowDecl :: A.Function -> CCode Toplevel
+functionWrapperSpecFlowDecl f =
+  FunctionDecl (Typ "value_t") (functionWrapperSpecFlowNameOf f)
+               [Ptr (Ptr encoreCtxT), Ptr (Ptr ponyTypeT),
+               Ptr $ Typ "value_t", Ptr void]
 
 -- TODO: different header from shared!
 functionWrapper ::
@@ -125,12 +143,21 @@ localFunctionWrapper :: A.Function -> CCode Toplevel
 localFunctionWrapper =
   functionWrapper localFunctionNameOf functionWrapperNameOf
 
+globalFunctionSpecFlowWrapper :: A.Function -> CCode Toplevel
+globalFunctionSpecFlowWrapper =
+  functionWrapper globalFunctionSpecFlowNameOf functionWrapperSpecFlowNameOf
+
+localFunctionSpecFlowWrapper :: A.Function -> CCode Toplevel
+localFunctionSpecFlowWrapper =
+  functionWrapper localFunctionSpecFlowNameOf functionWrapperSpecFlowNameOf
+
 instance Translatable A.Function
                      (ProgramTable ->
-                      (A.Function -> CCode Stat -> CCode Toplevel)
+                      (A.Function -> CCode Stat -> CCode Toplevel) ->
+                      Bool
                      -> CCode Toplevel) where
   -- | Translates a global function into the corresponding C-function
-  translate fun@(A.Function {A.funbody, A.funlocals}) table create =
+  translate fun@(A.Function {A.funbody, A.funlocals}) table create flow =
       let names     = map (ID.qLocal . A.functionName) funlocals
           localized = map (localize (A.functionName fun)) funlocals
           headers   = map A.funheader localized
@@ -151,13 +178,17 @@ instance Translatable A.Function
           typeParamSubst = map (\t -> (ID.Name $ getId t, AsLval $ typeVarRefName t)) funTypeParams
           ctx      = Ctx.setFunCtx (Ctx.new (argSubst ++ typeParamSubst) newTable) fun
           ((bodyName, bodyStat), _) = runState (translate funbody) ctx
+          ((bodyNameFlow, bodyStatFlow), _) = runState (translate funbody) $ Ctx.setIsFlowCtx ctx True
           closures = map (\clos -> translateClosure clos funTypeParams newTable)
                          (reverse (Util.filter A.isClosure funbody))
           bodyResult = (Seq $ dtraceFunctionEntry (A.functionName fun) argNames :
                               runtimeTypeAssignments ++
-                              [bodyStat
+                              [if flow then 
+                                bodyStatFlow
+                               else
+                                bodyStat
                               ,dtraceFunctionExit (A.functionName fun)
-                              ,returnStatement funType bodyName
+                              ,returnStatement funType $ if flow then bodyNameFlow else bodyName
                               ])
       in Concat $ locals ++ closures ++ [create fun bodyResult]
       where
@@ -173,7 +204,8 @@ translateLocalFunctions table funs =
       localWrapperDecls = map functionWrapperDecl funs
       localClosureInits = map initFunctionClosure funs
       localFunctionWrappers = map localFunctionWrapper funs
-      translated = map (\fun -> translate fun table localFunction) funs
+      translated = map (\fun -> translate fun table localFunction False) funs ++
+                   map (\fun -> translate fun table localFunction True) funs
   in localDecls ++
      localClosureDecls ++
      localWrapperDecls ++
