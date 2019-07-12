@@ -307,7 +307,7 @@ void flow_block_actor(pony_ctx_t** ctx, flow_t* flow)
   as_encore_actor->lock = &flow->lock;
   actor_block(ctx, as_encore_actor);
 
-  pthread_mutex_unlock(&flow->lock);
+  // pthread_mutex_unlock(&flow->lock);
 }
 
 void acquire_flow_value(pony_ctx_t** ctx, flow_t* flow)
