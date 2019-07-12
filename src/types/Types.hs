@@ -141,6 +141,7 @@ module Types(
             ,isUnsafeSingleType
             ,makeStackbound
             ,isStackboundType
+            ,getArrowParameters
             ) where
 
 import Identifiers
@@ -1175,3 +1176,8 @@ unfoldSingleSynonym t = t
 
 tupleLength Type{inner = TupleType {argTypes}} = length argTypes
 tupleLength _ = error "Types.hs: Expected a tuple type"
+
+getArrowParameters :: Type -> [Type]
+getArrowParameters ty 
+  | isArrowType ty = argTypes . inner $ ty
+  | otherwise = error "Type.hs: Expected an arrow type"

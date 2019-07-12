@@ -271,16 +271,20 @@ generateHeader p =
              DeclTL (Extern ponyTypeT, AsLval runtimeTy)
 
      encoreRuntimeTypeParam = Ptr (Ptr ponyTypeT)
-     methodFwds cdecl@(A.Class{A.cname, A.cmethods}) = map methodFwd cmethods
+     methodFwds cdecl@(A.Class{A.cname, A.cmethods}) = map (methodFwd False) cmethods ++
+                                                       map (methodFwd True)  cmethods
          where
-           methodFwd m
+           methodFwd isFlow m
                | A.isStreamMethod m =
                    let params = (Ptr (Ptr encoreCtxT)) :
                                 (Ptr . AsType $ classTypeName cname) :
                                 encoreRuntimeTypeParam : stream :
                                 map (translate . A.ptype) mparams
                    in
-                     FunctionDecl void (methodImplName cname mname) params
+                     FunctionDecl void ((if isFlow then 
+                                          methodImplSpecFlowName 
+                                        else 
+                                          methodImplName) cname mname) params
                | otherwise =
                    let params = if A.isMainClass cdecl && mname == ID.Name "main"
                                 then [Ptr . AsType $ classTypeName cname,
@@ -289,7 +293,10 @@ generateHeader p =
                                      encoreRuntimeTypeParam :
                                      map (translate . A.ptype) mparams
                    in
-                     FunctionDecl (translate mtype) (methodImplName cname mname)
+                     FunctionDecl (translate mtype) ((if isFlow then 
+                                                       methodImplSpecFlowName 
+                                                     else 
+                                                      methodImplName) cname mname)
                                   (Ptr (Ptr encoreCtxT):params)
                where
                  mname = A.methodName m

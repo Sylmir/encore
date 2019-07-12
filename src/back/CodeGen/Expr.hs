@@ -35,18 +35,57 @@ checkThisCallTemplate ctx =
     Ctx.MethodContext   met -> (Ty.isTypeVar . A.htype . A.mheader)   met
     _ -> False
 
-hasFlowInArgs :: A.Arguments -> Bool
-hasFlowInArgs args = (> 0) $ length $ filter (Ty.isFlowType . A.getType) args
+-- Find a Flow recursively in a list of types
+findFlowInTypes :: [Ty.Type] -> Bool
+findFlowInTypes ty = any findFlowInType ty
 
+-- Find a Flow recursively in a type. If the type has a result, recursively 
+-- search. If the type is an arrow, search in the parameters and in the result.
+findFlowInType :: Ty.Type -> Bool
+findFlowInType ty
+  | Ty.isFlowType ty      = True
+  | Ty.isArrowType ty     = (findFlowInTypes . Ty.getArrowParameters $ ty) || 
+                            (findFlowInType $ Ty.getResultType ty)
+  | Ty.hasResultType ty   = findFlowInType . Ty.getResultType $ ty
+  | otherwise             = False
+
+-- Check if a list of expressions has an expression with a Flow in it. This can
+-- be an expression whose type evaluates to Flow ; an expression whose type 
+-- evaluates to a parametric type, and we recurse on the result to search for 
+-- a Flow ; or an expression whose type evaluates to a closure, who
+hasFlowInArgs :: A.Arguments -> Bool
+hasFlowInArgs args = findFlowInTypes $ map A.getType args
+
+-- Given a function / method with a single type variable, and a set of arguments
+-- attempt to detect if the type variable is bound to a Flow
 checkBindingsForFlow :: A.FunctionHeader -> A.Arguments -> Bool
 checkBindingsForFlow header args =
   let
     params = map (A.ptype) $ A.hparams header
-    bindings = zip params args
+    bindings = zip params $ (map A.getType) args
   in
-    (not . isNothing) $ find (\(ty, arg) -> Ty.isTypeVar ty && 
-                                            (Ty.isFlowType . A.getType) arg)
-                             bindings
+    any checkBindingForFlow bindings
+  where
+    -- Attempt to detect if a type variable is bound to a Flow. The function will
+    -- strip arrows and parametric types to their core elements. For parametric
+    -- types, T[U[int]] will strip to int. For arrows T[U[int]] -> V[bool] ->
+    -- W[T[real]] will "strip" into int -> bool -> real. 
+    --
+    -- The first parameter is checked against, meaning that if you somehow reach
+    -- checkBindingForFlow Flow[int] t, you'll get an error, as you can't strip 
+    -- t any longer.
+    checkBindingForFlow :: (Ty.Type, Ty.Type) -> Bool
+    checkBindingForFlow (param, arg) 
+      | Ty.isTypeVar param     = Ty.isFlowType arg
+      | Ty.isArrowType param   = checkBindingForFlow (Ty.getResultType param,
+                                                      Ty.getResultType arg) ||
+                                 (any checkBindingForFlow $ 
+                                      zip (Ty.getArrowParameters param)
+                                          (Ty.getArrowParameters arg))
+      | Ty.hasResultType param = checkBindingForFlow (Ty.getResultType param,
+                                                      Ty.getResultType arg)
+      | otherwise              = False
+
 
 checkAtMostOneTypeVar :: A.FunctionHeader -> Ctx.Context -> Bool
 checkAtMostOneTypeVar header ctx = 
@@ -75,10 +114,13 @@ requiresSpecializationAlg okTypeVar thisTemplate targetTemplate paramFlow flowCt
   else
     False
 
+-- Check if the arguments contain a Flow, maybe in a nested parametric type, or
+-- as a parameter to a closure. If a Flow if found, check if one of these Flow
+-- becomes bound to a type variable in the header.
 checkParameterFlow :: A.FunctionHeader -> A.Arguments -> Bool
 checkParameterFlow header args = 
   if hasFlowInArgs args then
-    checkBindingsForFlow header args
+    trace "hasFlowInArgs" $ checkBindingsForFlow header args
   else
     False
 
@@ -630,7 +672,7 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
   translate new@(A.NewWithInit {A.ty, A.args})
     | Ty.isActiveSingleType ty = delegateUse callTheMethodOneway
     | Ty.isSharedSingleType ty = delegateUse callTheMethodOneway
-    | otherwise = delegateUse callTheMethodSync
+    | otherwise = delegateUse (callTheMethodSync False)
     where
       delegateUse methodCall =
         let
@@ -723,19 +765,24 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
                            ,recvNullCheck
                            ,tCall
                            ])
-    | syncAccess = delegateUse callTheMethodSync "sync_method_call"
-    | sharedAccess = delegateUse callTheMethodFuture "shared_method_call"
+    | syncAccess = delegateUse (callTheMethodSync False) 
+                               (callTheMethodSync True) "sync_method_call"
+    | sharedAccess = delegateUse callTheMethodFuture callTheMethodFutureSpecFlow "shared_method_call"
     | otherwise = error $ "Expr.hs: Don't know how to call target of type " ++
                           Ty.showWithKind targetTy ++
                           " at " ++ Meta.showPos (A.getMeta call)
         where
           targetTy = A.getType target
           retTy = A.getType call
-          delegateUse methodCall sym = do
+          delegateUse methodCall methodCallSpecFlow sym = do
             result <- Ctx.genNamedSym sym
+            ctx <- get
             (ntarget, ttarget) <- translate target
             (initArgs, resultExpr) <-
-              methodCall ntarget targetTy name args typeArguments retTy
+              if requiresSpecialization call ctx then 
+                methodCallSpecFlow ntarget targetTy name args typeArguments retTy
+              else
+                methodCall ntarget targetTy name args typeArguments retTy
             return (Var result,
               Seq $
                 ttarget :
@@ -1563,8 +1610,8 @@ callTheMethodFlow = callTheMethodForName callMethodFlowName
 
 callTheMethodFlowSpecFlow = callTheMethodForName callMethodFlowSpecFlowName
 
-callTheMethodSync targetName targetType methodName args typeargs resultType = do
-  (initArgs, expr) <- callTheMethodForName methodImplName
+callTheMethodSync isFlow targetName targetType methodName args typeargs resultType = do
+  (initArgs, expr) <- callTheMethodForName (if isFlow then methodImplSpecFlowName else methodImplName)
     targetName targetType methodName args typeargs resultType
   header <- gets $ Ctx.lookupMethod targetType methodName
   return (initArgs
@@ -1574,7 +1621,7 @@ callTheMethodSync targetName targetType methodName args typeargs resultType = do
       | Ty.isTypeVar retType && (not . Ty.isTypeVar) resultType =
           AsExpr . fromEncoreArgT (translate resultType)
       | otherwise = id
-
+  
 callTheMethodForName ::
   (Ty.Type -> ID.Name -> CCode Name) ->
   CCode Lval -> Ty.Type -> ID.Name -> [A.Expr] -> [Ty.Type] -> Ty.Type
