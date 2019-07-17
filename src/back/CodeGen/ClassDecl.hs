@@ -62,7 +62,11 @@ typeStructDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                 (map (\ty -> (Ptr ponyTypeT, AsLval $ typeVarRefName ty)) typeParams ++
                    zip
                    (map (translate  . A.ftype) cfields)
-                   (map (AsLval . fieldName . A.fname) cfields)))
+                   (map (AsLval . fieldName . A.fname) cfields))) ++
+                if length (Ty.getTypeParameters cname) > 0 then
+                  [(translate Ty.boolType, Var "_enc__reflex__is_flow")]
+                else
+                  []
 
 dispatchFunDecl :: A.ClassDecl -> CCode Toplevel
 dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
@@ -187,9 +191,12 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
                else Seq [Call (Nam "fprintf") [AsExpr stderr, (String "Can't use forward in a flow call (yet ?)")],
                          Call (Nam "exit") [Int 1]]
 
-             -- Specialize a function only if its return type is parametric
+             -- Specialize a function only if its return type is parametric and
+             -- if the sum of the number of type parameters for the class and
+             -- the method itself doesn't exceed one (for now)
              allowedForFlowSpec = 
-               (Ty.isTypeVar . A.htype . A.mheader) mdecl
+               (Ty.isTypeVar . A.htype . A.mheader) mdecl &&
+               length ((A.htypeparams . A.mheader $ mdecl) ++ (Ty.getTypeParameters cname)) == 1
 
              flowSpec = 
                if allowedForFlowSpec then

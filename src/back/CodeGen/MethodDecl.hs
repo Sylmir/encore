@@ -91,7 +91,6 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
                       ,specBodys
                       ,dtraceMethodExit thisVar mName
                       ,returnStatement mType specBodyn]) -- mType ?
-
     in
       code ++ return (Concat $ locals ++ closures ++
                                [normalMethodImpl] ++
@@ -99,7 +98,7 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
                                   (A.isMainMethod cname mName)
                                then []
                                else [forwardingMethodImpl]) ++ 
-                               if Ty.isTypeVar mType then
+                               if needSpecFlow then
                                  [specFlowMethodImpl]
                                else
                                  []
@@ -125,7 +124,10 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
       ctx = Ctx.setMtdCtx (Ctx.new subst newTable) mdecl
       forwardingCtx = Ctx.setMtdCtx(Ctx.newWithForwarding subst newTable) mdecl
       ((bodyn,bodys),_) = runState (translate mbody) ctx
-      ((specBodyn, specBodys), _) = runState (translate mbody) (Ctx.setMtdCtx (Ctx.newWithFlow subst newTable) mdecl)
+      ((specBodyn, specBodys), _) = 
+        runState (translate mbody) (Ctx.setMtdCtx (Ctx.newWithFlow subst 
+                                                                   newTable)
+                                                   mdecl)
       ((forwardingBodyName,forwardingBody),_) =
         runState (translate mbody) forwardingCtx
       mTypeVars = A.methodTypeParams mdecl
@@ -159,6 +161,8 @@ translateGeneral mdecl@(A.Method {A.mbody, A.mlocals})
                                 (Cast returnType forwardingBodyName)]
           in
               If futVar (Statement $ Call futureFulfil fulfilArgs) Skip
+
+      needSpecFlow = Ty.isTypeVar mType
 
 callMethodWithFuture m cdecl@(A.Class {A.cname}) code
   | A.isActive cdecl ||

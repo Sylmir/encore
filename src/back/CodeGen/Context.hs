@@ -79,8 +79,8 @@ data Context = Context {
     The asynchronous flow call to f(2) would result in a Flow[int] with a result
     type of VALUE. This isn't because we are calling f with an int and not a 
     Flow, but because the result type of f isn't a Flow ; instead it is "t", a 
-    type variable. This isn't problematic here, but it becomes problematic with 
-    in second call.
+    type variable. This isn't problematic here, but it becomes problematic in
+    the second call.
 
     The asynchronous call to f(y) would result in a Flow[int] with a result type
     of VALUE, because the result type of f isn't a Flow. Even if "y" evaluates 

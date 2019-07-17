@@ -36,30 +36,31 @@ checkThisCallTemplate ctx =
     _ -> False
 
 -- Find a Flow recursively in a list of types
-findFlowInTypes :: [Ty.Type] -> Bool
-findFlowInTypes ty = any findFlowInType ty
+findFlowInTypes :: [Ty.Type] -> Bool -> Bool
+findFlowInTypes ty flowCtx = any ((flip findFlowInType) flowCtx) ty
 
 -- Find a Flow recursively in a type. If the type has a result, recursively 
 -- search. If the type is an arrow, search in the parameters and in the result.
-findFlowInType :: Ty.Type -> Bool
-findFlowInType ty
+findFlowInType :: Ty.Type -> Bool -> Bool
+findFlowInType ty flowCtx
   | Ty.isFlowType ty      = True
-  | Ty.isArrowType ty     = (findFlowInTypes . Ty.getArrowParameters $ ty) || 
-                            (findFlowInType $ Ty.getResultType ty)
-  | Ty.hasResultType ty   = findFlowInType . Ty.getResultType $ ty
+  | Ty.isArrowType ty     = (findFlowInTypes (Ty.getArrowParameters $ ty) flowCtx) || 
+                            (findFlowInType (Ty.getResultType ty) flowCtx)
+  | Ty.hasResultType ty   = findFlowInType (Ty.getResultType ty) flowCtx
+  | Ty.isTypeVar ty       = flowCtx
   | otherwise             = False
 
 -- Check if a list of expressions has an expression with a Flow in it. This can
 -- be an expression whose type evaluates to Flow ; an expression whose type 
 -- evaluates to a parametric type, and we recurse on the result to search for 
 -- a Flow ; or an expression whose type evaluates to a closure, who
-hasFlowInArgs :: A.Arguments -> Bool
-hasFlowInArgs args = findFlowInTypes $ map A.getType args
+hasFlowInArgs :: A.Arguments -> Bool -> Bool
+hasFlowInArgs args flowCtx = findFlowInTypes (map A.getType args) flowCtx
 
 -- Given a function / method with a single type variable, and a set of arguments
 -- attempt to detect if the type variable is bound to a Flow
-checkBindingsForFlow :: A.FunctionHeader -> A.Arguments -> Bool
-checkBindingsForFlow header args =
+checkBindingsForFlow :: A.FunctionHeader -> A.Arguments -> Bool -> Bool
+checkBindingsForFlow header args flowCtx =
   let
     params = map (A.ptype) $ A.hparams header
     bindings = zip params $ (map A.getType) args
@@ -76,7 +77,7 @@ checkBindingsForFlow header args =
     -- t any longer.
     checkBindingForFlow :: (Ty.Type, Ty.Type) -> Bool
     checkBindingForFlow (param, arg) 
-      | Ty.isTypeVar param     = Ty.isFlowType arg
+      | Ty.isTypeVar param     = Ty.isFlowType arg || flowCtx
       | Ty.isArrowType param   = checkBindingForFlow (Ty.getResultType param,
                                                       Ty.getResultType arg) ||
                                  (any checkBindingForFlow $ 
@@ -87,9 +88,11 @@ checkBindingsForFlow header args =
       | otherwise              = False
 
 
-checkAtMostOneTypeVar :: A.FunctionHeader -> Ctx.Context -> Bool
-checkAtMostOneTypeVar header ctx = 
-  length getTypeVars <= 1 && (length . A.htypeparams) header <= 1
+checkAtMostOneTypeVar :: A.FunctionHeader -> Ctx.Context -> Maybe Ty.Type -> 
+                         Bool
+checkAtMostOneTypeVar header ctx cls = 
+  length getTypeVars <= 1 && 
+  (length (A.htypeparams header) + nClassTypeVars) <= 1
   where 
     getTypeVars :: [Ty.Type]
     getTypeVars =
@@ -98,8 +101,22 @@ checkAtMostOneTypeVar header ctx =
         Ctx.MethodContext   met -> (A.htypeparams . A.mheader)    met
         _ -> []
 
+    nClassTypeVars = 
+      if isNothing cls then 
+        0 
+      else 
+        length $ Ty.getTypeParameters . fromJust $ cls 
+      
+{- Parameters are as follow :
+      * okTypeVar : is the sum of typevars in all contexts 1 ?
+      * thisTemplate : are we in a generic function ?
+      * targetTemplate : is the called function generic ?
+      * paramFlow : is the parameter of the called function bound to flow ?
+      * flowCtx : are we in the flow version of a function ?
+-}
 requiresSpecializationAlg :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool
-requiresSpecializationAlg okTypeVar thisTemplate targetTemplate paramFlow flowCtx =
+requiresSpecializationAlg okTypeVar thisTemplate targetTemplate 
+                          paramFlow flowCtx =
   if okTypeVar then
     if not thisTemplate then
       if not targetTemplate then
@@ -110,34 +127,39 @@ requiresSpecializationAlg okTypeVar thisTemplate targetTemplate paramFlow flowCt
       if not targetTemplate then
         False
       else
-        flowCtx
+        paramFlow
   else
     False
 
 -- Check if the arguments contain a Flow, maybe in a nested parametric type, or
--- as a parameter to a closure. If a Flow if found, check if one of these Flow
+-- as a parameter to a closure. If a Flow is found, check if one of these Flow
 -- becomes bound to a type variable in the header.
-checkParameterFlow :: A.FunctionHeader -> A.Arguments -> Bool
-checkParameterFlow header args = 
-  if hasFlowInArgs args then
-    trace "hasFlowInArgs" $ checkBindingsForFlow header args
+checkParameterFlow :: A.FunctionHeader -> A.Arguments -> Bool -> Bool
+checkParameterFlow header args flowCtx = 
+  if hasFlowInArgs args flowCtx then
+    trace "hasFlowInArgs" $ checkBindingsForFlow header args flowCtx
   else
     False
 
-requiresSpecializationMethodCall :: A.Expr -> ID.Name -> A.Arguments -> [Ty.Type] -> Ctx.Context -> Bool
-requiresSpecializationMethodCall target name args typeArguments ctx =
+requiresSpecializationMethodCall :: A.Expr -> ID.Name -> A.Arguments -> 
+                                    [Ty.Type] -> Ctx.Context -> Ty.Type -> 
+                                    Bool
+requiresSpecializationMethodCall target name args typeArguments ctx targetTy =
   let
     isThisCallTemplate                = checkThisCallTemplate ctx
     (targetMethod, isTargetTemplate)  = getTargetMethodAndTemplating
-    hasAtMostOneTypeVar               = checkAtMostOneTypeVar targetMethod ctx
+    hasAtMostOneTypeVar               = checkAtMostOneTypeVar targetMethod 
+                                                              ctx
+                                                              (Just targetTy)
     isFlow                            = Ctx.isFlowCtx ctx
-    isParameterFlow                   = checkParameterFlow targetMethod args
+    isParameterFlow                   = checkParameterFlow targetMethod args isFlow
   in
     requiresSpecializationAlg hasAtMostOneTypeVar
                               isThisCallTemplate
                               isTargetTemplate
                               isParameterFlow
                               isFlow
+
   where
     getTargetMethod :: A.FunctionHeader
     getTargetMethod = Ctx.lookupMethod (A.getType target) name ctx
@@ -152,21 +174,31 @@ requiresSpecializationMethodCall target name args typeArguments ctx =
 -- Indicates if a given expression requires a specialization when dealing with
 -- Flows
 requiresSpecialization :: A.Expr -> Ctx.Context -> Bool
-requiresSpecialization call@A.MessageSendFlow{A.emeta, A.target, A.name, A.args, A.typeArguments} ctx =
-  requiresSpecializationMethodCall target name args typeArguments ctx
+requiresSpecialization call@A.MessageSendFlow{A.emeta, A.target, A.name, 
+                                              A.args, A.typeArguments} 
+                       ctx =
+  requiresSpecializationMethodCall target name args typeArguments ctx (A.getType target)
     
-requiresSpecialization call@A.MessageSend{A.emeta, A.target, A.name, A.args, A.typeArguments} ctx =
-  requiresSpecializationMethodCall target name args typeArguments ctx
+requiresSpecialization call@A.MessageSend{A.emeta, A.target, A.name, 
+                                          A.args, A.typeArguments} 
+                       ctx =
+  requiresSpecializationMethodCall target name args typeArguments ctx (A.getType target)
 
-requiresSpecialization call@A.MethodCall{A.emeta, A.target, A.name, A.typeArguments, A.args} ctx = 
-  requiresSpecializationMethodCall target name args typeArguments ctx
+requiresSpecialization call@A.MethodCall{A.emeta, A.target, A.name, 
+                                         A.typeArguments, A.args} 
+                       ctx = 
+  requiresSpecializationMethodCall target name args typeArguments ctx (A.getType target)
 
-requiresSpecialization call@A.FunctionCall{A.emeta, A.typeArguments, A.qname, A.args} ctx =
+requiresSpecialization call@A.FunctionCall{A.emeta, A.typeArguments, 
+                                           A.qname, A.args} 
+                       ctx =
   let
     isThisCallTemplate                  = checkThisCallTemplate ctx
     (targetFunction, isTargetTemplate)  = getTargetFunctionAndTemplating
-    hasAtMostOneTypeVar                 = checkAtMostOneTypeVar targetFunction ctx
-    isParameterFlow                     = checkParameterFlow targetFunction args
+    hasAtMostOneTypeVar                 = checkAtMostOneTypeVar targetFunction 
+                                                                ctx 
+                                                                Nothing
+    isParameterFlow                     = checkParameterFlow targetFunction args isFlow
     isFlow                              = Ctx.isFlowCtx ctx
   in
     requiresSpecializationAlg hasAtMostOneTypeVar 
