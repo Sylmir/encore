@@ -348,6 +348,8 @@ subtypeOf sub super
     | isFlowType super && (not . isFlowType) sub = do
         let res = fst $ stripTypeN super isFlowType
         sub `equivalentTo` res
+    | isFlowType super && isFlowType sub = do
+        (stripFlow super) `equivalentTo` (stripFlow sub)
     | hasResultType sub && hasResultType super =
         liftM (sub `hasSameKind` super &&) $
               getResultType sub `subtypeOf` getResultType super
