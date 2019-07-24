@@ -1033,10 +1033,18 @@ instance Checkable Expr where
            elsTypeInf <- if knownType elsType
                          then return elsType
                          else elsType `coercedInto` resultType
+           let eThn' = if isFlowType resultType && (not . isFlowType $ thnType) then 
+                         LiftToFlow { emeta = getMeta eThn, val = eThn }
+                       else
+                         eThn
+               eEls' = if isFlowType resultType && (not . isFlowType $ elsType) then
+                         LiftToFlow { emeta = getMeta eEls, val = eEls }
+                       else
+                         eEls
            return $ setType resultType
                     ifThenElse {cond = eCond
-                               ,thn = setType thnTypeInf eThn
-                               ,els = setType elsTypeInf eEls
+                               ,thn = setType thnTypeInf eThn'
+                               ,els = setType elsTypeInf eEls'
                                }
         where
           knownType ty =
