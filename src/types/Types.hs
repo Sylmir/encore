@@ -76,6 +76,7 @@ module Types(
             ,setArgTypes
             ,getResultType
             ,getFlowResultType
+            ,stripFlow
             ,getId
             ,maybeGetId
             ,alphaConvert
@@ -366,11 +367,11 @@ getFlowResultType ty
     | isFlowType ty = stripFlow $ (getResultType ty)
     | otherwise = error $ "Types.hs: tried to get the flowResultType of " ++ 
                           (show ty)
-    where
-      stripFlow :: Type -> Type
-      stripFlow ty 
-        | isFlowType ty = stripFlow $ getResultType ty
-        | otherwise = ty
+
+stripFlow :: Type -> Type
+stripFlow ty 
+  | isFlowType ty = stripFlow $ getResultType ty
+  | otherwise = ty
 
 getId ty =
     fromMaybe

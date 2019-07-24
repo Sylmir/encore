@@ -2360,43 +2360,6 @@ matchTypes expected ty
         ty `assertSubtypeOf` expected
         asks bindings
 
-      -- UNUSED
-      -- Attempt to allow multiple subtyping rules to be handled similarily.
-
-      -- Indicates if T or T' is a supertype.
-      -- A type T is a supertype if there is a rule in the type system like
-      -- T' <: T (T is a supertype). For example, with Flow we have
-      -- T <: Flow[T], so Flow[T] is a supertype.
-      --
-      -- Examples : isSuperType Flow[int] float     = True
-      --            isSuperType int       float     = False
-      --            isSuperType Flow[int] Flow[int] = True
-      isSupertype :: Type -> Type -> Bool
-      isSupertype l r
-        | isFlowType l || isFlowType r  = True
-        | otherwise                     = False
-
-      -- Process a supertype. Either @ty1@ or @ty2@ must be a supertype,
-      -- otherwise the function throws an exception.
-      --
-      -- @checkF@ is the function used to check if @ty1@ or @ty2@ is a
-      -- supertype.
-      --
-      -- The function proceeds as follows : if both @ty1@ and @ty2@ are
-      -- super types, it strips them into their subtypes (for example,
-      -- Flow[Flow[int]] is stripped to int). Then, it tries to match the
-      -- subtypes. The process is similar if only @ty1@ or only @ty2@ is
-      -- a supertype. The function @stripF@ is used to strip the supertypes.
-      processSupertypes :: Type -> Type -> (Type -> Bool) ->
-        (Type -> Type) -> TypecheckM[(Type, Type)]
-      processSupertypes l r checkF stripF
-        | checkF l && checkF r          = matchTypes (stripF l) (stripF r)
-        | checkF l && (not $ checkF r)  = matchTypes (stripF l) r
-        | (not $ checkF l) && checkF r  = matchTypes l (stripF r)
-        -- If neither l nor r is a supertype, this function shouldn't have
-        -- been called.
-        | otherwise                     = tcError $ SimpleError "processSupertypes can only process supertypes"
-
 inferenceCall call typeParams argTypes resultType
   | isMethodCallOrMessageSend call || isFunctionCall call = do
       let uniquify = uniquifyTypeVars typeParams

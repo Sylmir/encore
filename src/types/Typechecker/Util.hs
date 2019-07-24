@@ -47,9 +47,6 @@ module Typechecker.Util(TypecheckM
                        ,isSharableType
                        ,checkConjunction
                        ,includesMarkerTrait
-                       ,checkNotNestedFlow
-                       ,stripType
-                       ,stripFlow
                        ,collapseFlow
                        ) where
 
@@ -346,10 +343,9 @@ subtypeOf sub super
     | isArrayType sub && isArrayType super =
         getResultType sub `equivalentTo` getResultType super
     | isFlowType super && (not . isFlowType) sub = do
-        let res = fst $ stripTypeN super isFlowType
-        sub `equivalentTo` res
+        sub `equivalentTo` (Ty.stripFlow super)
     | isFlowType super && isFlowType sub = do
-        (stripFlow super) `equivalentTo` (stripFlow sub)
+        (Ty.stripFlow super) `equivalentTo` (Ty.stripFlow sub)
     | hasResultType sub && hasResultType super =
         liftM (sub `hasSameKind` super &&) $
               getResultType sub `subtypeOf` getResultType super
@@ -960,93 +956,6 @@ checkConjunction source sinks
     singleConjunction ty1 ty2 (tys1, tys2) =
         ty1 `elem` tys1 && ty2 `elem` tys2 ||
         ty1 `elem` tys2 && ty2 `elem` tys1
-
--- Strip a parametric type down to its final element.
--- Example : stripType Fut[Fut[int]] isFutType = int.
-stripType :: Type -> (Type -> Bool) -> Type
-stripType ty check
-      | check ty  = stripType (getResultType ty) check
-      | otherwise = ty
-
--- Strip a parametric type down to its final element, counting the number of
--- times we went down.
--- Example : stripTypeN Fut[Fut[int]] isFutType = (int, 2)
-stripTypeN :: Type -> (Type -> Bool) -> (Type, Int)
-stripTypeN ty check = runState (stripTypeNM ty check) 0
-  where
-    stripTypeNM :: Type -> (Type -> Bool) -> State Int Type
-    stripTypeNM ty check
-      | check ty = do
-        state <- get
-        put $ state + 1
-        stripTypeNM (getResultType ty) check
-      | otherwise = return ty
-
-stripFlow :: Type -> Type
-stripFlow ty = stripType ty isFlowType
-
--- Check that a type is not Flow[Flow[...]]. The semantics of flow don't allow 
--- the construct Flow[Flow[T]] to explicitly appear. The only exception is in 
--- the case of a parametric type.
---
--- All these rules must be applied before resolving type variables.
--- Rules :
---  * Flow[Flow[T]], with T not a type variable, is forbidden
---  * Flow[T], with T a synonym resolving to Flow[U], where U is not a type
--- variable is forbidden
---  * Flow[t] with t a type variable, possibly resolving to Flow[U], with U a 
--- type or synonym, is allowed
---  * T[Flow[U]], with T a synonym over a type variable t bound to type Flow[U], 
--- where T[t] expands to Flow[t], is allowed. 
---
--- There are four places we can encounter nested Flows :
---  * Functions / methods parameters
---  * Functions / methods return types
---  * Field types
---  * Typedefs
--- 
--- Nested Flows may come in two different ways : through explicit nesting, 
--- eventually using type synonyms ; or through implicit nesting, using type
--- variables. The first case is rather easy to deal with, as we don't need to 
--- expand types. The second case is much harder as we need to partially apply
--- type variables in order to deduce if a Flow[Flow[T]] construct would appear. 
---
--- Here are a few examples :
---  1) fun f(x : Flow[Flow[int]]) : Flow[Flow[int]] -> this is wrong, because 
--- parameter x and the return type are both explicitly nested Flows
---  2) fun f[t](x : Flow[Flow[t]]) : t -> this is wrong, because parameter x 
--- is an explicitly nested Flow, regardless of the fact that there is a type 
--- parameter
---  3) typedef T = Flow[int]; fun f() : Flow[T] -> this is wrong, because the 
--- return type of f expands to Flow[Flow[int]]
---  4) typedef T[t] = Flow[t]; fun f() : Flow[T] -> this is wrong, because the
--- return type of f expands to Flow[Flow[t]], regardless of the fact that there 
--- is a type parameter
---  5) typedef T[t] = Flow[t]; fun f() : T[Flow[int]] -> this is correct, as we 
--- don't perform type variable resolution. We read T[Flow[int]] as Flow[t]. Note
--- that this example merely reverses the order of type parameters in regard to 
--- example 4). 4) is wrong, and 5) is correct.
-checkNotNestedFlow :: Type -> TypecheckM Bool
-checkNotNestedFlow ty
-  -- This is the Flow[Flow[]] case, written as-is (no type variable expansion)
-  | isFlowType ty && isFlowType (getResultType ty) = 
-      (tcWarning $ ExplicitNestedFlowWarning ty) >> return True
-  | isFlowType ty = do
-    let resultType = getResultType ty
-    -- Flow[t] is always accepted
-    if isTypeVar resultType then
-      return True
-    else do
-      -- If we are seeing Flow[Something], we must resolve Something to check
-      -- if it is Flow. The tricky part comes when trying to resolve Something.
-      -- We must make sure we are not accidentally resolving a type parameter.
-      --
-      -- TODO : finish this nightmare
-      result <- resolveType resultType
-      when (isFlowType result)
-        (tcWarning $ ExplicitNestedFlowSynonymWarning ty resultType)
-      return True
-  | otherwise = return True
 
 -- Collapse the Flows in a parametric type
 -- Array[Flow[Flow[int]]] -> Array[Flow[int]]
