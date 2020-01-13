@@ -766,3 +766,9 @@ specializeFor src ty = specialize src ++ "_" ++ ty
 
 specializeForFlow :: String -> String
 specializeForFlow src = specializeFor src "flow"
+
+flowClassReflexFieldStr :: String
+flowClassReflexFieldStr = "_enc__reflex__is_flow"
+
+flowClassReflexField :: CCode Lval
+flowClassReflexField = Var flowClassReflexFieldStr
