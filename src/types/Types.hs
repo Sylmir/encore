@@ -143,6 +143,8 @@ module Types(
             ,makeStackbound
             ,isStackboundType
             ,getArrowParameters
+            ,getClassParameters
+            ,setClassParameters
             ) where
 
 import Identifiers
@@ -1181,4 +1183,17 @@ tupleLength _ = error "Types.hs: Expected a tuple type"
 getArrowParameters :: Type -> [Type]
 getArrowParameters ty 
   | isArrowType ty = argTypes . inner $ ty
-  | otherwise = error "Type.hs: Expected an arrow type"
+  | otherwise = error "Types.hs: Expected an arrow type"
+
+getClassParameters :: Type -> [Type]
+getClassParameters ty
+  | isClassType ty = parameters . refInfo . inner $ ty
+  | otherwise = error "Types.hs: Expected a class type"
+
+setClassParameters :: Type -> [Type] -> Type
+setClassParameters ty params
+  | isClassType ty = 
+      let inner' = inner ty
+          infos = refInfo inner'
+      in ty{inner = inner'{refInfo = infos{parameters=params}}}
+  | otherwise = error "Types.hs: Expected a class type"

@@ -44,6 +44,7 @@ findFlowInTypes ty flowCtx = any ((flip findFlowInType) flowCtx) ty
 findFlowInType :: Ty.Type -> Bool -> Bool
 findFlowInType ty flowCtx
   | Ty.isFlowType ty      = True
+  | Ty.isClassType ty     = findFlowInTypes (Ty.getClassParameters ty) flowCtx
   | Ty.isArrowType ty     = (findFlowInTypes (Ty.getArrowParameters $ ty) flowCtx) || 
                             (findFlowInType (Ty.getResultType ty) flowCtx)
   | Ty.hasResultType ty   = findFlowInType (Ty.getResultType ty) flowCtx
@@ -78,6 +79,9 @@ checkBindingsForFlow header args flowCtx =
     checkBindingForFlow :: (Ty.Type, Ty.Type) -> Bool
     checkBindingForFlow (param, arg) 
       | Ty.isTypeVar param     = Ty.isFlowType arg || flowCtx
+      | Ty.isClassType param   = any checkBindingForFlow $ 
+                                     zip (Ty.getClassParameters param)
+                                         (Ty.getClassParameters arg)
       | Ty.isArrowType param   = checkBindingForFlow (Ty.getResultType param,
                                                       Ty.getResultType arg) ||
                                  (any checkBindingForFlow $ 
