@@ -28,6 +28,7 @@ traceVariable t var
     Ty.isSharedSingleType t = traceActor var
   | Ty.isClassType t        = traceObject var $ classTraceFnName t
   | Ty.isCapabilityType t   = traceCapability var
+  | Ty.isFlowType t         = traceObject var flowTraceFn
   | Ty.isFutureType t       = traceObject var futureTraceFn
   | Ty.isArrowType t        = traceObject var closureTraceFn
   | Ty.isArrayType t        = traceObject var arrayTraceFn
