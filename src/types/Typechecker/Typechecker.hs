@@ -2424,7 +2424,7 @@ retType mcall targetType header t = do
   else if isStreamMethodHeader header
   then return $ streamType t
   else if isMessageSendFlow mcall
-  then collapseFlow $ flowType t
+  then collapseFlowM $ flowType t
   else return $ futureType t  
 
 typecheckPrivateModifier target name = do

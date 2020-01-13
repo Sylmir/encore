@@ -133,21 +133,17 @@ instance Precheckable Typedef where
                          mapM resolveTypeParameter (getTypeParameters typedefdef)
      let resolvesTo = typeSynonymRHS typedefdef
          addTypeParams = addTypeParameters typeParams
-     -- TODO : check that we don't have nested flows
-     resolvesTo' <- local addTypeParams $ resolveTypeAndCheckForLoops resolvesTo >>= collapseFlow
+     resolvesTo' <- local addTypeParams $ resolveTypeAndCheckForLoops resolvesTo >>= collapseFlowM
      let typedefdef' = typeSynonymSetRHS typedefdef resolvesTo'
                        `setTypeParameters` typeParams
-     -- trace ("typedef " ++ (show typedefdef) ++ " collapsed to " ++ (show resolvesTo')) $ return ()
      return $ t{typedefdef = typedefdef'}
 
 instance Precheckable FunctionHeader where
     doPrecheck header = do
       htypeparams' <- local (addTypeParameters (htypeparams header)) $
                             mapM resolveTypeParameter (htypeparams header)
-      -- TODO : check that we don't have nested flows
       htype' <- (local (addTypeParameters htypeparams') $
-                      resolveType (htype header)) >>= collapseFlow
-      -- trace ("Function " ++ (show $ hname header) ++ " return type collapsed to " ++ (show htype')) $ return ()
+                      resolveType (htype header)) >>= collapseFlowM
       hparams' <- local (addTypeParameters htypeparams') $
                         mapM precheck (hparams header)
 
@@ -187,9 +183,7 @@ instance Precheckable Function where
 
 instance Precheckable ParamDecl where
     doPrecheck p@Param{ptype} = do
-      -- TODO : check that we don't have nested flows
-      ptype' <- resolveType ptype >>= collapseFlow
-      -- trace ("Parameter " ++ (show $ pname p) ++ " collapsed to " ++ (show ptype')) $ return ()
+      ptype' <- resolveType ptype >>= collapseFlowM
       return $ setType ptype' p
 
 instance Precheckable Requirement where
@@ -355,9 +349,7 @@ instance Precheckable ClassDecl where
 
 instance Precheckable FieldDecl where
     doPrecheck f@Field{ftype} = do
-      -- TODO : check that we don't have nested flows
-      ftype' <- resolveType ftype >>= collapseFlow
-      -- trace ("Field " ++ (show $ fname f) ++ " collapsed to " ++ (show ftype')) $ return ()
+      ftype' <- resolveType ftype >>= collapseFlowM
       return $ setType ftype' f
 
 instance Precheckable MethodDecl where

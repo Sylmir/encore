@@ -47,7 +47,7 @@ module Typechecker.Util(TypecheckM
                        ,isSharableType
                        ,checkConjunction
                        ,includesMarkerTrait
-                       ,collapseFlow
+                       ,collapseFlowM
                        ) where
 
 import Identifiers
@@ -957,15 +957,21 @@ checkConjunction source sinks
         ty1 `elem` tys1 && ty2 `elem` tys2 ||
         ty1 `elem` tys2 && ty2 `elem` tys1
 
--- Collapse the Flows in a parametric type
--- Array[Flow[Flow[int]]] -> Array[Flow[int]]
--- Flow[Fut[Flow[Flow[int]]]] -> Flow[Fut[Flow[int]]]
-collapseFlow :: Type -> TypecheckM Type
-collapseFlow ty
-  | hasResultType ty = 
-      let result =  if isFlowType ty then
-                      collapseFlow (stripFlow ty)
-                    else
-                      collapseFlow (getResultType ty)
-      in result >>= \collapsed -> return $ setResultType ty collapsed
-  | otherwise = return ty
+collapseFlowM :: Type -> TypecheckM Type
+collapseFlowM ty = return $ collapseFlow ty
+  where
+    -- Collapse a Flow.
+    -- TODO : type synonyms
+    collapseFlow :: Type -> Type
+    collapseFlow ty
+      | hasResultType ty = 
+          let result =  if isFlowType ty then
+                          collapseFlow (stripFlow ty)
+                        else
+                          collapseFlow (getResultType ty)
+          in setResultType ty result
+      | isClassType ty = 
+          let parameters = getClassParameters ty
+              collapsed = map collapseFlow parameters
+          in setClassParameters ty collapsed
+      | otherwise = ty
