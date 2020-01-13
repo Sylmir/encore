@@ -2272,19 +2272,15 @@ matchTypes expected ty
                            tcError $ TypeMismatchError ty expected
                        TCError err _ -> tcError err
                      )
-    -- Flow<T> and T is OK. Flow<T> and Flow<T> is OK.
-    -- By Flow<T> <=> T, Flow<T> and Flow<Flow<T>> is OK.
-    --
-    -- Let us consider Flow[T]. We define the stripFlow function :
-    --    T != Flow : stripFlow T = T
-    --    T == Flow T' : stripFlow T = stripFlow T'
+    -- Flow / Flow
     | isFlowType expected && isFlowType ty =
         let stripExpected = stripFlow expected
             stripTy       = stripFlow ty
-        in trace "Two flows" $ matchTypes stripExpected stripTy
+        in matchTypes stripExpected stripTy
+    -- Flow / not Flow
     | isFlowType expected && (not . isFlowType) ty =
         let stripExpected = stripFlow expected
-        in trace "Left is flow" $ matchTypes stripExpected ty
+        in matchTypes stripExpected ty
     | isTupleType expected && isTupleType ty = do
         let expArgTypes = getArgTypes expected
             argTypes = getArgTypes ty
